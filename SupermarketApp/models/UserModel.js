@@ -2,7 +2,6 @@ const db = require('../db');
 
 function StudentModel() {
   return {
-    // Get all users (includes password for login checks)
     getAllStudents(callback) {
       const sql = 'SELECT id, username, email, password, address, contact, role FROM users';
       db.query(sql, (err, results) => {
@@ -11,7 +10,6 @@ function StudentModel() {
       });
     },
 
-    // Get single user by id
     getStudentById(id, callback) {
       const sql = 'SELECT id, username, email, password, address, contact, role FROM users WHERE id = ? LIMIT 1';
       db.query(sql, [id], (err, results) => {
@@ -20,7 +18,6 @@ function StudentModel() {
       });
     },
 
-    // Add a new user; password hashed via SHA1 in SQL
     addStudent(studentData, callback) {
       const sql = 'INSERT INTO users (username, email, password, address, contact, role) VALUES (?, ?, SHA1(?), ?, ?, ?)';
       const params = [
@@ -37,14 +34,13 @@ function StudentModel() {
       });
     },
 
-    // Update user (partial). If password provided it's hashed.
     updateStudent(id, studentData, callback) {
       const allowed = ['username', 'email', 'password', 'address', 'contact', 'role'];
       const keys = Object.keys(studentData).filter(k => allowed.includes(k));
       if (keys.length === 0) return callback(new Error('No valid fields provided for update'));
 
-      let setClauses = [];
-      let params = [];
+      const setClauses = [];
+      const params = [];
       keys.forEach(k => {
         if (k === 'password') {
           setClauses.push('password = SHA1(?)');
@@ -63,7 +59,6 @@ function StudentModel() {
       });
     },
 
-    // Delete user by id
     deleteStudent(id, callback) {
       const sql = 'DELETE FROM users WHERE id = ?';
       db.query(sql, [id], (err, result) => {
