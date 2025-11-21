@@ -20,6 +20,16 @@ function ProductModel() {
       });
     },
 
+    getProductsByIds(ids = [], callback) {
+      if (!Array.isArray(ids) || ids.length === 0) return callback(null, []);
+      const placeholders = ids.map(() => '?').join(', ');
+      const sql = `SELECT id, productName, quantity, price, image FROM products WHERE id IN (${placeholders})`;
+      db.query(sql, ids, (err, results) => {
+        if (err) return callback(err);
+        callback(null, results);
+      });
+    },
+
     // Add a new product
     // productData: { productName, quantity, price, image }
     addProduct(productData, callback) {

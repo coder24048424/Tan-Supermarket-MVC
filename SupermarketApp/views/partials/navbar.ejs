@@ -1,0 +1,41 @@
+<% const currentUser = typeof user === 'undefined' ? null : user; %>
+<header class="app-header">
+  <div class="nav-shell">
+    <a class="brand-logo" href="/">Tan's Supermarket</a>
+
+    <ul class="nav-list">
+      <li><a href="/">Home</a></li>
+      <% if (currentUser && currentUser.role === 'admin') { %>
+        <li><a href="/inventory">Inventory</a></li>
+        <li><a href="/addProduct">Add Products</a></li>
+        <li><a href="/orders">Orders</a></li>
+      <% } else if (currentUser) { %>
+        <li><a href="/shopping">Shop</a></li>
+        <li><a href="/cart">Cart</a></li>
+        <li><a href="/orders">Orders</a></li>
+      <% } else { %>
+        <li><a href="/login">Login</a></li>
+        <li><a href="/register">Register</a></li>
+      <% } %>
+    </ul>
+
+    <div class="nav-cta">
+      <% if (currentUser) { %>
+        <div class="user-greeting">
+          <span class="avatar-circle"><%= currentUser.username ? currentUser.username.charAt(0).toUpperCase() : 'U' %></span>
+          <span>
+            Hi, <strong><%= currentUser.username || 'User' %></strong>
+            <span class="badge-pill"><%= currentUser.role %></span>
+          </span>
+        </div>
+        <% if (currentUser.role !== 'admin') { %>
+          <a class="btn btn-secondary" href="/cart">Cart</a>
+        <% } %>
+        <a class="btn btn-primary" href="/logout">Logout</a>
+      <% } else { %>
+        <a class="btn btn-secondary" href="/login">Login</a>
+        <a class="btn btn-primary" href="/register">Create Account</a>
+      <% } %>
+    </div>
+  </div>
+</header>

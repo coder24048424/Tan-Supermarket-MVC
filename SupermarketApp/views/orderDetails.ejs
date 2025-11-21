@@ -1,62 +1,58 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Order Details</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
+<%- include('partials/head', { pageTitle: 'Order details', bodyClass: 'page-orders' }) %>
 
-<body>
-  <!-- Navbar -->
-  <nav class="navbar navbar-expand-sm bg-dark navbar-dark">
-    <div class="container-fluid">
-      <a class="navbar-brand" href="/">Supermarket App</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#collapsibleNavbar">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="collapsibleNavbar">
-        <ul class="navbar-nav">
-          <li class="nav-item"><a class="nav-link" href="/shopping">Shop</a></li>
-          <li class="nav-item"><a class="nav-link" href="/cart">View Cart</a></li>
-          <li class="nav-item"><a class="nav-link" href="/logout">Logout</a></li>
-        </ul>
-      </div>
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Order #<%= order.id %></h2>
+      <p class="subtle-text mb-0">Placed on <%= order.created_at.toLocaleString() %></p>
     </div>
-  </nav>
-
-  <!-- Page Content -->
-  <div class="container mt-4">
-
-    <h2>Order #<%= order.id %></h2>
-    <p><b>Date:</b> <%= order.created_at.toLocaleString() %></p>
-    <p><b>Total:</b> $<%= order.total.toFixed(2) %></p>
-
-    <h4 class="mt-4">Items</h4>
-
-    <table class="table table-bordered">
-      <thead class="table-dark">
-        <tr>
-          <th>Product</th>
-          <th>Price ($)</th>
-          <th>Qty</th>
-          <th>Subtotal</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% order.items.forEach(i => { %>
-          <tr>
-            <td><%= i.productName %></td>
-            <td><%= i.price %></td>
-            <td><%= i.quantity %></td>
-            <td>$<%= (i.price * i.quantity).toFixed(2) %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-
-    <a href="/orders" class="btn btn-secondary mt-3">Back to Orders</a>
-
+    <a class="btn btn-secondary" href="/orders">Back to orders</a>
   </div>
 
-</body>
-</html>
+  <div class="split-layout">
+    <div class="summary-card">
+      <h4>Total Paid</h4>
+      <p class="summary-total">$<%= order.total.toFixed(2) %></p>
+      <div class="summary-row">
+        <span>Status</span>
+        <span class="status-pill success">Delivered</span>
+      </div>
+      <div class="summary-row">
+        <span>Items</span>
+        <span><%= order.items.length %></span>
+      </div>
+      <% if (order.notes) { %>
+        <div class="note-card mt-3 text-start">
+          <strong>Delivery notes</strong>
+          <p class="mb-0"><%= order.notes %></p>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="glass-panel">
+      <h5>Items</h5>
+      <table class="table-modern mt-3">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Price</th>
+            <th>Qty</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% order.items.forEach(item => { %>
+            <tr>
+              <td><%= item.productName %></td>
+              <td>$<%= item.price.toFixed(2) %></td>
+              <td><%= item.quantity %></td>
+              <td>$<%= (item.price * item.quantity).toFixed(2) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

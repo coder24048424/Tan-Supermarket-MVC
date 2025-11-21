@@ -9,11 +9,12 @@ const UserController = require('./controllers/UserController');
 const OrdersController = require('./controllers/OrdersController');
 const ProductModel = require('./models/ProductModel');
 const UserModel = require('./models/UserModel');
+const { buildCategories } = require('./utils/catalog');
 
 const app = express();
 
 // ========================
-// Multer file upload setup
+// Multer Setup
 // ========================
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -26,7 +27,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ========================
-// App config
+// App Middlewares
 // ========================
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
@@ -38,10 +39,17 @@ app.use(session({
     saveUninitialized: true,
     cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 }
 }));
+
 app.use(flash());
 
+// Make the logged-in user available in every view
+app.use((req, res, next) => {
+    res.locals.user = req.session.user || null;
+    next();
+});
+
 // ========================
-// Middlewares
+// Auth Middlewares
 // ========================
 const checkAuthenticated = (req, res, next) => {
     if (req.session.user) return next();
@@ -56,9 +64,9 @@ const checkAdmin = (req, res, next) => {
 };
 
 const validateRegistration = (req, res, next) => {
-    const { username, email, password, address, contact, role } = req.body;
+    const { username, email, password, address, contact } = req.body;
 
-    if (!username || !email || !password || !address || !contact || !role) {
+    if (!username || !email || !password || !address || !contact) {
         req.flash('error', 'All fields are required.');
         req.flash('formData', req.body);
         return res.redirect('/register');
@@ -74,31 +82,49 @@ const validateRegistration = (req, res, next) => {
 };
 
 // ========================
-// Routes
+// ROUTES
 // ========================
 
 // Home
 app.get('/', (req, res) => {
-    res.render('index', { user: req.session.user });
-});
+    ProductModel.getAllProducts((err, products = []) => {
+        if (err) {
+            console.error('Failed to load products for homepage:', err);
+            return res.render('index', {
+                user: req.session.user,
+                bestSeller: null,
+                categories: []
+            });
+        }
 
-// Register
-app.get('/register', (req, res) => {
-    res.render('register', {
-        messages: req.flash('error'),
-        formData: req.flash('formData')[0]
+        const bestSeller = products.reduce((top, product) => {
+            if (!top) return product;
+            return (product.quantity || 0) > (top.quantity || 0) ? product : top;
+        }, null);
+
+        const categories = buildCategories(products);
+
+        res.render('index', {
+            user: req.session.user,
+            bestSeller,
+            categories
+        });
     });
 });
+
+// ========================
+// AUTH
+// ========================
+app.get('/register', (req, res) => {
+    res.render('register', { messages: req.flash('error'), formData: req.flash('formData')[0] });
+});
+
 app.post('/register', validateRegistration, (req, res) =>
     UserController.createUser(req, res)
 );
 
-// Login
 app.get('/login', (req, res) => {
-    res.render('login', {
-        messages: req.flash('success'),
-        errors: req.flash('error')
-    });
+    res.render('login', { messages: req.flash('success'), errors: req.flash('error') });
 });
 
 app.post('/login', (req, res) => {
@@ -134,7 +160,9 @@ app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
 });
 
-// Shopping
+// ========================
+// SHOPPING
+// ========================
 app.get('/shopping', checkAuthenticated, (req, res) =>
     ProductController.listProducts(req, res)
 );
@@ -149,14 +177,31 @@ app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => {
     const quantity = parseInt(req.body.quantity, 10) || 1;
 
     ProductModel.getProductById(productId, (err, product) => {
-        if (err || !product) return res.redirect('/shopping');
+        if (err || !product) {
+            req.flash('error', 'Unable to add this product right now.');
+            return res.redirect('/shopping');
+        }
 
         if (!req.session.cart) req.session.cart = [];
 
         const existing = req.session.cart.find(i => i.productId === productId);
+        const available = Number(product.quantity) || 0;
+
+        if (available === 0) {
+            req.flash('error', `${product.productName} is currently out of stock.`);
+            return res.redirect('/shopping');
+        }
+
+        const existingQty = existing ? existing.quantity : 0;
+        const desiredQty = existingQty + quantity;
+
+        if (desiredQty > available) {
+            req.flash('error', `${product.productName} only has ${available} left. Adjust the quantity in your cart.`);
+            return res.redirect('/shopping');
+        }
 
         if (existing) {
-            existing.quantity += quantity;
+            existing.quantity = desiredQty;
         } else {
             req.session.cart.push({
                 productId: product.id,
@@ -167,15 +212,18 @@ app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => {
             });
         }
 
+        req.flash('success', `${product.productName} added to your cart.`);
         res.redirect('/cart');
     });
 });
 
-// View cart
+// Cart page
 app.get('/cart', checkAuthenticated, (req, res) => {
     res.render('cart', {
         cart: req.session.cart || [],
-        user: req.session.user
+        user: req.session.user,
+        errors: req.flash('error'),
+        success: req.flash('success')
     });
 });
 
@@ -185,18 +233,15 @@ app.get('/remove-from-cart/:id', checkAuthenticated, (req, res) => {
 
     if (!req.session.cart) req.session.cart = [];
 
-    req.session.cart = req.session.cart.filter(
-        item => item.productId !== productId
-    );
+    req.session.cart = req.session.cart.filter(item => item.productId !== productId);
 
     req.flash('success', 'Item removed.');
     res.redirect('/cart');
 });
 
 // ========================
-// PRODUCT MANAGEMENT (Admin)
+// ADMIN PRODUCT MGMT
 // ========================
-
 app.get('/inventory', checkAuthenticated, checkAdmin, (req, res) =>
     ProductController.listProducts(req, res)
 );
@@ -240,7 +285,7 @@ app.post('/checkout', checkAuthenticated, (req, res) =>
     OrdersController.placeOrder(req, res)
 );
 
-// Orders list
+// Purchase history
 app.get('/orders', checkAuthenticated, (req, res) =>
     OrdersController.viewOrders(req, res)
 );
@@ -251,7 +296,7 @@ app.get('/orders/:id', checkAuthenticated, (req, res) =>
 );
 
 // ========================
-// Start Server
+// START SERVER
 // ========================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

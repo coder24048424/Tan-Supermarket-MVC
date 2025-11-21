@@ -43,7 +43,7 @@ function UserController() {
         password: req.body.password,
         address: req.body.address,
         contact: req.body.contact,
-        role: req.body.role || 'user'
+        role: 'user'
       };
 
       if (!userData.username || !userData.email || !userData.password) {

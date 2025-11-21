@@ -1,9 +1,98 @@
 const ProductModel = require('../models/ProductModel');
+const { matchesCategory, CATEGORY_NAMES } = require('../utils/catalog');
+
+const LOW_STOCK_THRESHOLD = 10;
+const STOCK_OPTIONS = [
+  { value: 'all', label: 'All stock' },
+  { value: 'in', label: 'In stock' },
+  { value: 'low', label: `Low stock (≤${LOW_STOCK_THRESHOLD})` },
+  { value: 'out', label: 'Out of stock' }
+];
+const SORT_OPTIONS = [
+  { value: 'featured', label: 'Featured' },
+  { value: 'price-asc', label: 'Price: Low to High' },
+  { value: 'price-desc', label: 'Price: High to Low' },
+  { value: 'stock-asc', label: 'Stock: Low to High' },
+  { value: 'stock-desc', label: 'Stock: High to Low' }
+];
+const CATEGORY_OPTIONS = [
+  { value: '', label: 'All categories' },
+  ...CATEGORY_NAMES.map((name) => ({ value: name, label: name }))
+];
+
+const parseFilters = (query = {}) => {
+  const stockValues = new Set(STOCK_OPTIONS.map(opt => opt.value));
+  const sortValues = new Set(SORT_OPTIONS.map(opt => opt.value));
+  const categoryValues = new Set(CATEGORY_NAMES);
+  const searchTerm = (query.q ?? query.search ?? '').toString().trim();
+  const stock = stockValues.has(query.stock) ? query.stock : 'all';
+  const sort = sortValues.has(query.sort) ? query.sort : 'featured';
+  const categoryInput = (query.category ?? '').toString().trim();
+  const category = categoryValues.has(categoryInput) ? categoryInput : null;
+  return {
+    search: searchTerm,
+    stock,
+    sort,
+    category,
+    hasActive: Boolean(searchTerm) || stock !== 'all' || sort !== 'featured' || Boolean(category)
+  };
+};
+
+const applyFilters = (products = [], filters) => {
+  let filtered = [...products];
+  if (filters.search) {
+    const searchLower = filters.search.toLowerCase();
+    filtered = filtered.filter(p => (p.productName || '').toLowerCase().includes(searchLower));
+  }
+
+  if (filters.stock === 'in') {
+    filtered = filtered.filter(p => (p.quantity || 0) > 0);
+  } else if (filters.stock === 'low') {
+    filtered = filtered.filter(p => (p.quantity || 0) > 0 && (p.quantity || 0) <= LOW_STOCK_THRESHOLD);
+  } else if (filters.stock === 'out') {
+    filtered = filtered.filter(p => (p.quantity || 0) === 0);
+  }
+
+  if (filters.category) {
+    filtered = filtered.filter(p => matchesCategory(p, filters.category));
+  }
+
+  if (filters.sort === 'price-asc') {
+    filtered.sort((a, b) => (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0));
+  } else if (filters.sort === 'price-desc') {
+    filtered.sort((a, b) => (parseFloat(b.price) || 0) - (parseFloat(a.price) || 0));
+  } else if (filters.sort === 'stock-asc') {
+    filtered.sort((a, b) => (a.quantity || 0) - (b.quantity || 0));
+  } else if (filters.sort === 'stock-desc') {
+    filtered.sort((a, b) => (b.quantity || 0) - (a.quantity || 0));
+  }
+
+  return filtered;
+};
+
+const buildStats = (products = [], filtered = []) => {
+  const lowStockCount = products.filter(p => (p.quantity || 0) > 0 && (p.quantity || 0) <= LOW_STOCK_THRESHOLD).length;
+  const outOfStockCount = products.filter(p => (p.quantity || 0) === 0).length;
+  const inventoryValue = products.reduce((sum, p) => {
+    return sum + ((parseFloat(p.price) || 0) * (p.quantity || 0));
+  }, 0);
+  return {
+    totalProducts: products.length,
+    filteredCount: filtered.length,
+    lowStockCount,
+    outOfStockCount,
+    inventoryValue
+  };
+};
 
 function ProductController() {
   return {
     // List all products
     listProducts(req, res) {
+      const errors = req.flash('error');
+      const success = req.flash('success');
+      const filters = parseFilters(req.query);
+
       ProductModel.getAllProducts((err, products) => {
         if (err) {
           console.error('Error fetching products:', err);
@@ -11,15 +100,31 @@ function ProductController() {
           return res.status(500).json({ error: 'Failed to fetch products' });
         }
 
+        const filteredProducts = applyFilters(products, filters);
+        const stats = buildStats(products, filteredProducts);
+        const basePayload = {
+          products: filteredProducts,
+          user: req.session.user,
+          filters,
+          stats,
+          filterOptions: { stock: STOCK_OPTIONS, sort: SORT_OPTIONS, category: CATEGORY_OPTIONS },
+          errors,
+          success
+        };
+
         // Render inventory for admin route, shopping for public route
         if (req.accepts('html')) {
           if (req.path && req.path.startsWith('/inventory')) {
-            return res.render('inventory', { products, user: req.session.user, messages: req.flash('error') });
+            return res.render('inventory', basePayload);
           }
-          return res.render('shopping', { products, user: req.session.user });
+          return res.render('shopping', basePayload);
         }
 
-        return res.json(products);
+        return res.json({
+          data: filteredProducts,
+          filters,
+          stats
+        });
       });
     },
 

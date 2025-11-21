@@ -1,0 +1,68 @@
+<%- include('partials/head', { pageTitle: 'Purchase history', bodyClass: 'page-orders' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-4">
+    <div>
+      <h2 class="section-title mb-1">Purchase history</h2>
+      <p class="subtle-text mb-0">Timeline cards reminiscent of the concept shot.</p>
+    </div>
+    <a class="btn btn-secondary" href="/shopping">Shop again</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(message => { %><div><%= message %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(message => { %><div><%= message %></div><% }) %>
+    </div>
+  <% } %>
+
+  <% if (orders.length === 0) { %>
+    <div class="empty-state">
+      <h4>You have not checked out yet</h4>
+      <p>Let us build your first basket.</p>
+      <a class="btn btn-primary mt-2" href="/shopping">Explore catalog</a>
+    </div>
+  <% } else { %>
+    <div class="d-flex flex-column gap-3">
+      <% orders.forEach(order => { %>
+        <% const placedOn = new Date(order.created_at); %>
+        <% const itemCount = order.items ? order.items.length : (order.itemsCount || 0); %>
+        <div class="inventory-card">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="subtle-text mb-1">Order #<%= order.id %></p>
+              <h4><%= placedOn.toLocaleString() %></h4>
+            </div>
+            <span class="status-pill success">$<%= order.total.toFixed(2) %></span>
+          </div>
+          <% if (order.items && order.items.length) { %>
+            <ul class="order-summary-list mt-3">
+              <% order.items.slice(0, 3).forEach(item => { %>
+                <li><strong><%= item.productName %></strong> &times; <%= item.quantity %></li>
+              <% }) %>
+              <% if (order.items.length > 3) { %>
+                <li class="subtle-text">+ <%= order.items.length - 3 %> more item(s)</li>
+              <% } %>
+            </ul>
+          <% } %>
+          <% if (order.notes) { %>
+            <div class="note-card mt-2 text-start">
+              <strong>Note:</strong>
+              <p class="mb-0"><%= order.notes %></p>
+            </div>
+          <% } %>
+          <div class="d-flex justify-content-between align-items-center mt-3">
+            <span class="subtle-text"><%= itemCount || 'Multiple' %> items</span>
+            <a class="btn btn-primary" href="/orders/<%= order.id %>">View details</a>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

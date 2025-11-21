@@ -1,0 +1,11 @@
+<%- include('partials/head', { pageTitle: 'Something went wrong', bodyClass: 'page-error' }) %>
+
+<section class="glass-panel text-center">
+  <div class="empty-state">
+    <h2>Oops!</h2>
+    <p><%= message || 'An unexpected error occurred. Please try again later.' %></p>
+    <a class="btn btn-primary mt-3" href="/">Back to home</a>
+  </div>
+</section>
+
+<%- include('partials/footer') %>
