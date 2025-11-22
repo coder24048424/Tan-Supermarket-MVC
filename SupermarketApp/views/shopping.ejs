@@ -4,7 +4,7 @@
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
     <div>
       <h2 class="section-title mb-1">Build your basket</h2>
-      <p class="subtle-text mb-0">Curated cards inspired by the Dribbble design -- elevated imagery, rounded corners, gentle gradients.</p>
+      <p class="subtle-text mb-0">Add your favorites to the basket and we’ll keep them ready.</p>
     </div>
     <div class="chip">Hi <%= user.username %>, showing <%= stats.filteredCount %> of <%= stats.totalProducts %> products</div>
   </div>
@@ -21,31 +21,33 @@
   <% } %>
 
   <form class="catalog-toolbar" action="/shopping" method="GET">
-    <div class="search-field">
-      <input type="text" name="q" placeholder="Search by product name" value="<%= filters.search %>">
-    </div>
-    <div class="toolbar-selects">
-      <select name="category">
-        <% filterOptions.category.forEach(option => { %>
-          <option value="<%= option.value %>" <%= (filters.category || '') === option.value ? 'selected' : '' %>><%= option.label %></option>
-        <% }) %>
-      </select>
-      <select name="stock">
-        <% filterOptions.stock.forEach(option => { %>
-          <option value="<%= option.value %>" <%= filters.stock === option.value ? 'selected' : '' %>><%= option.label %></option>
-        <% }) %>
-      </select>
-      <select name="sort">
-        <% filterOptions.sort.forEach(option => { %>
-          <option value="<%= option.value %>" <%= filters.sort === option.value ? 'selected' : '' %>><%= option.label %></option>
-        <% }) %>
-      </select>
-    </div>
-    <div class="toolbar-actions">
-      <button type="submit" class="btn btn-primary">Apply</button>
-      <% if (filters.hasActive) { %>
-        <a class="btn btn-link" href="/shopping">Reset</a>
-      <% } %>
+    <div class="catalog-toolbar-inner">
+      <div class="search-field flex-fill">
+        <input type="text" name="q" placeholder="Search by product name" value="<%= filters.search %>">
+      </div>
+      <div class="toolbar-selects">
+        <select name="category">
+          <% filterOptions.category.forEach(option => { %>
+            <option value="<%= option.value %>" <%= (filters.category || '') === option.value ? 'selected' : '' %>><%= option.label %></option>
+          <% }) %>
+        </select>
+        <select name="stock">
+          <% filterOptions.stock.forEach(option => { %>
+            <option value="<%= option.value %>" <%= filters.stock === option.value ? 'selected' : '' %>><%= option.label %></option>
+          <% }) %>
+        </select>
+        <select name="sort">
+          <% filterOptions.sort.forEach(option => { %>
+            <option value="<%= option.value %>" <%= filters.sort === option.value ? 'selected' : '' %>><%= option.label %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="toolbar-actions ms-auto">
+        <button type="submit" class="btn btn-primary">Apply</button>
+        <% if (filters.hasActive) { %>
+          <a class="btn btn-link" href="/shopping">Reset</a>
+        <% } %>
+      </div>
     </div>
   </form>
 
@@ -70,29 +72,72 @@
           <span class="price-tag">$<%= product.price.toFixed(2) %></span>
         </div>
         <p class="subtle-text mb-2">
-          Stock: <strong><%= product.quantity %></strong>
-          <% if ((product.quantity || 0) <= 10) { %>
-            <span class="chip warning ms-2">Low</span>
+          <% const qty = Number(product.quantity) || 0; %>
+          Stock: <strong><%= qty %></strong>
+          <% if (qty === 0) { %>
+            <span class="chip danger ms-2">NO STOCK</span>
+          <% } else if (qty <= 10) { %>
+            <span class="chip warning ms-2">LOW</span>
+          <% } else { %>
+            <span class="chip success ms-2">IN STOCK</span>
           <% } %>
         </p>
 
         <form action="/add-to-cart/<%= product.id %>" method="POST" class="d-flex flex-column gap-2 mt-auto">
           <div class="qty-control">
             <label for="quantity-<%= product.id %>" class="subtle-text m-0">Qty</label>
-            <select class="form-select" id="quantity-<%= product.id %>" name="quantity">
-              <% for (let q = 1; q <= Math.min(5, product.quantity || 5); q++) { %>
-                <option value="<%= q %>"><%= q %></option>
-              <% } %>
-            </select>
+            <div class="qty-stepper" data-max="<%= product.quantity || 1 %>">
+              <button type="button" class="btn-icon qty-minus" aria-label="Decrease quantity">-</button>
+              <input
+                type="number"
+                class="qty-input"
+                id="quantity-<%= product.id %>"
+                name="quantity"
+                value="1"
+                min="1"
+                max="<%= product.quantity || 1 %>"
+                inputmode="numeric"
+              />
+              <button type="button" class="btn-icon qty-plus" aria-label="Increase quantity">+</button>
+            </div>
           </div>
           <div class="d-flex gap-2">
-            <a class="btn btn-secondary flex-fill" href="/product/<%= product.id %>">View</a>
             <button type="submit" class="btn btn-primary flex-fill">Add to cart</button>
+            <a class="btn btn-secondary flex-fill" href="/product/<%= product.id %>">View</a>
           </div>
         </form>
       </div>
     <% }) %>
   </div>
 </section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.qty-stepper').forEach(stepper => {
+      const minus = stepper.querySelector('.qty-minus');
+      const plus = stepper.querySelector('.qty-plus');
+      const input = stepper.querySelector('.qty-input');
+      const max = parseInt(input.getAttribute('max') || '99', 10);
+      const min = parseInt(input.getAttribute('min') || '1', 10);
+
+      const clampAndSet = (next) => {
+        const clamped = Math.min(Math.max(next, min), max || min);
+        input.value = isNaN(clamped) ? min : clamped;
+      };
+
+      minus.addEventListener('click', () => {
+        clampAndSet(parseInt(input.value || '1', 10) - 1);
+      });
+
+      plus.addEventListener('click', () => {
+        clampAndSet(parseInt(input.value || '1', 10) + 1);
+      });
+
+      input.addEventListener('input', () => {
+        clampAndSet(parseInt(input.value || '1', 10));
+      });
+    });
+  });
+</script>
 
 <%- include('partials/footer') %>

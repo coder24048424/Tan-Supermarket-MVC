@@ -1,4 +1,4 @@
-const catalog = [
+  const catalog = [
   { label: 'Fresh Produce', keywords: ['apple', 'banana', 'tomato', 'broccoli', 'lettuce', 'berry', 'veg'] },
   { label: 'Bakery & Grains', keywords: ['bread', 'bagel', 'grain', 'rice', 'pasta'] },
   { label: 'Dairy & Drinks', keywords: ['milk', 'cream', 'yogurt', 'juice'] },

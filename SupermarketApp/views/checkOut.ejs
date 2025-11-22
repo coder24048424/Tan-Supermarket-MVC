@@ -31,13 +31,39 @@
       <div class="form-panel">
         <form action="/checkout" method="POST" class="d-grid gap-3">
           <h3 class="mb-3">Delivery preferences</h3>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label" for="firstName">First name</label>
+              <input type="text" id="firstName" name="firstName" class="form-control" placeholder="First name" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="lastName">Last name</label>
+              <input type="text" id="lastName" name="lastName" class="form-control" placeholder="Last name" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="company">Company (optional)</label>
+            <input type="text" id="company" name="company" class="form-control" placeholder="Company">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="address">Address</label>
+            <input type="text" id="address" name="address" class="form-control" placeholder="Street address" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="apartment">Apartment, suite, etc. (optional)</label>
+            <input type="text" id="apartment" name="apartment" class="form-control" placeholder="Unit, floor">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="postalCode">Postal code</label>
+            <input type="text" id="postalCode" name="postalCode" class="form-control" placeholder="Postal code" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="phone">Phone</label>
+            <input type="tel" id="phone" name="phone" class="form-control" placeholder="+65 0000 0000" required>
+          </div>
           <div class="mb-3">
             <label class="form-label" for="notes">Drop-off notes</label>
             <textarea id="notes" name="notes" class="form-control" rows="3" placeholder="Gate code, bell, leave with concierge..."></textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="contact">Contact number</label>
-            <input type="tel" id="contact" name="contact" class="form-control" placeholder="+65 0000 0000">
           </div>
           <button class="btn btn-primary btn-lg">Place order &rarr; $<%= total.toFixed(2) %></button>
         </form>

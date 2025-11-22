@@ -46,13 +46,37 @@ function OrdersController() {
       if (!user) return res.redirect('/login');
 
       const cart = req.session.cart || [];
+      const firstName = (req.body.firstName || '').trim();
+      const lastName = (req.body.lastName || '').trim();
+      const company = (req.body.company || '').trim();
+      const address = (req.body.address || '').trim();
+      const apartment = (req.body.apartment || '').trim();
+      const postalCode = (req.body.postalCode || '').trim();
+      const phone = (req.body.phone || '').trim();
+      const notesInput = (req.body.notes || '').trim();
+
+      if (!firstName || !lastName || !address || !postalCode || !phone) {
+        req.flash('error', 'Please enter your name, address, postal code, and phone number to place the order.');
+        return res.redirect('/checkout');
+      }
+
+      const notesParts = [
+        `Name: ${firstName} ${lastName}`,
+        company ? `Company: ${company}` : '',
+        `Address: ${address}`,
+        apartment ? `Unit: ${apartment}` : '',
+        `Postal code: ${postalCode}`,
+        `Phone: ${phone}`,
+        notesInput ? `Notes: ${notesInput}` : ''
+      ].filter(Boolean);
+
+      const notes = notesParts.join('\n');
       if (!cart.length) {
         req.flash('error', 'Cart is empty');
         return res.redirect('/shopping');
       }
 
       const productIds = cart.map(item => item.productId);
-      const notes = (req.body.notes || '').trim();
 
       ProductModel.getProductsByIds(productIds, (err, liveProducts) => {
         if (err) {
@@ -173,6 +197,91 @@ function OrdersController() {
         return res.render('orderDetails', {
           order,
           user
+        });
+      });
+    },
+
+    // ===============================
+    // REORDER ALL ITEMS INTO CART
+    // ===============================
+    reorder(req, res, orderId) {
+      const user = req.session.user;
+      if (!user) return res.redirect('/login');
+
+      OrdersModel.getOrderById(orderId, user.id, (err, order) => {
+        if (err) {
+          console.error('Failed to load order for reorder:', err);
+          req.flash('error', 'Unable to reorder right now.');
+          return res.redirect('/orders');
+        }
+
+        if (!order || !order.items || !order.items.length) {
+          req.flash('error', 'Order not found or has no items.');
+          return res.redirect('/orders');
+        }
+
+        const productIds = [...new Set(order.items.map(i => i.product_id))];
+
+        ProductModel.getProductsByIds(productIds, (productErr, products = []) => {
+          if (productErr) {
+            console.error('Failed to fetch products for reorder:', productErr);
+            req.flash('error', 'Unable to reorder these items at the moment.');
+            return res.redirect('/orders');
+          }
+
+          const catalog = new Map(products.map(p => [p.id, p]));
+          const cart = req.session.cart || [];
+          let addedCount = 0;
+          const skipped = [];
+
+          order.items.forEach(item => {
+            const product = catalog.get(item.product_id);
+            const available = product ? Number(product.quantity) || 0 : 0;
+            if (!product || available === 0) {
+              skipped.push(`${item.productName || 'Item'} (no stock)`);
+              return;
+            }
+
+            const existing = cart.find(c => c.productId === product.id);
+            const previousQty = existing ? existing.quantity : 0;
+            const desired = Math.min(item.quantity, available);
+            const newQty = Math.min(previousQty + desired, available);
+            const actuallyAdded = newQty - previousQty;
+
+            if (actuallyAdded <= 0) {
+              skipped.push(`${product.productName} (limit reached)`);
+              return;
+            }
+
+            if (existing) {
+              existing.quantity = newQty;
+            } else {
+              cart.push({
+                productId: product.id,
+                productName: product.productName,
+                price: product.price,
+                quantity: actuallyAdded,
+                image: product.image
+              });
+            }
+
+            addedCount += actuallyAdded;
+
+            if (desired > actuallyAdded) {
+              skipped.push(`${product.productName} (only ${actuallyAdded} added)`);
+            }
+          });
+
+          req.session.cart = cart;
+
+          if (addedCount > 0) {
+            req.flash('success', `Added ${addedCount} item(s) from order #${order.id} to your cart.`);
+          }
+          if (skipped.length) {
+            req.flash('error', `Some items could not be added: ${skipped.join(', ')}.`);
+          }
+
+          return res.redirect('/cart');
         });
       });
     }

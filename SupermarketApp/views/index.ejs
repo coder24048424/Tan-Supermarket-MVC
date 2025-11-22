@@ -3,40 +3,53 @@
 <section class="hero home-hero">
   <div class="hero-content">
     <span class="badge-pill">Tan's Supermarket</span>
-    <h1>Fresh picks stacked high with color.</h1>
-    <p>Scroll through vibrant produce mosaics inspired by the design reference, then jump straight into your shopping flow.</p>
+    <h1>Fresh finds for every kind of day.</h1>
+    <p>Seasonal picks, pantry staples, and bold flavors&mdash;curated fast so you can get back to what matters.</p>
 
-    <div class="hero-gallery mt-4">
-      <div class="tile"><img src="/images/apples.png" alt="Apples"></div>
-      <div class="tile"><img src="/images/bananas.png" alt="Bananas"></div>
-      <div class="tile"><img src="/images/broccoli.png" alt="Broccoli"></div>
-      <div class="tile"><img src="/images/tomatoes.png" alt="Tomatoes"></div>
-    </div>
-    <div class="hero-card hero-card-inline">
+    <div class="hero-card hero-card-inline mb-4">
       <% if (!user) { %>
-        <h3>Join the market</h3>
-        <p class="subtle-text">Sign in or create an account to start building your basket.</p>
-        <div class="cta-group">
-          <a class="btn btn-primary" href="/login">Login</a>
-          <a class="btn btn-secondary" href="/register">Create account</a>
-        </div>
+        <h3>Welcome to Tan's Supermarket</h3>
+        <p class="subtle-text">Log in to start exploring the market.</p>
+        <a class="btn btn-primary mt-2" href="/login">Login</a>
       <% } else { %>
         <h3>Welcome back, <%= user.username %></h3>
-        <p class="subtle-text mb-3">Ready to keep curating your cart?</p>
-        <% if (user.role === 'admin') { %>
-          <div class="cta-group">
-            <a class="btn btn-primary" href="/inventory">Manage inventory</a>
-            <a class="btn btn-secondary" href="/addProduct">Add product</a>
-          </div>
-        <% } else { %>
-          <div class="cta-group">
-            <a class="btn btn-primary" href="/shopping">Shop now</a>
-            <a class="btn btn-secondary" href="/orders">View orders</a>
-          </div>
-        <% } %>
+        <p class="subtle-text mb-0">Glad to have you back in the aisles.</p>
       <% } %>
     </div>
   </div>
+</section>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title">What's new</h2>
+      <p class="subtle-text mb-0">Fresh arrivals pulled straight from our shelves.</p>
+    </div>
+    <% if (newProducts && newProducts.length) { %>
+      <a class="btn btn-secondary" href="/shopping">View all</a>
+    <% } %>
+  </div>
+
+  <% if (!newProducts || !newProducts.length) { %>
+    <div class="empty-state">
+      <p>No new products yet. Add one to showcase it here.</p>
+    </div>
+  <% } else { %>
+    <div class="card-grid">
+      <% newProducts.forEach(product => { %>
+        <div class="product-card">
+          <span class="chip">New arrival</span>
+          <img src="/images/<%= product.image %>" alt="<%= product.productName %>">
+          <h3><%= product.productName %></h3>
+          <p class="subtle-text mb-0">In stock: <%= product.quantity %></p>
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="price-tag">$<%= Number(product.price || 0).toFixed(2) %></span>
+            <a class="btn btn-link" href="/product/<%= product.id %>">See details</a>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+  <% } %>
 </section>
 
 <section class="glass-panel">
@@ -71,38 +84,38 @@
   <% } %>
 </section>
 
-<section class="glass-panel category-showcase text-center">
-  <div class="mb-4">
-    <h2 class="section-title mb-1">Shop by category</h2>
-    <p class="subtle-text mb-3">Bold cards with just the essentials, centered for quick browsing.</p>
-    <a class="btn btn-secondary" href="/shopping">Browse Catalog</a>
-  </div>
+<% if (user) { %>
+  <section class="glass-panel">
+    <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+      <div>
+        <h2 class="section-title">Frequent buys</h2>
+        <p class="subtle-text mb-0">Items you reach for most often, ready to re-add.</p>
+      </div>
+      <a class="btn btn-secondary" href="/shopping">Browse catalog</a>
+    </div>
 
-  <% if (!categories || !categories.length) { %>
-    <div class="empty-state">
-      <p>No categories available. Add products to populate this section.</p>
-    </div>
-  <% } else { %>
-    <div class="category-grid">
-      <% categories.forEach(category => { %>
-        <% if (category.items.length) { %>
-          <% const hero = category.items[0]; %>
-          <div class="category-card">
-            <div class="category-image">
-              <img src="/images/<%= hero.image %>" alt="<%= hero.productName %>">
+    <% const frequent = []; if (categories && categories.length) { categories.forEach(cat => { (cat.items || []).slice(0,1).forEach(item => frequent.push(item)); }); } if ((!frequent.length) && newProducts && newProducts.length) { newProducts.slice(0,4).forEach(item => frequent.push(item)); } %>
+
+    <% if (!frequent.length) { %>
+      <div class="empty-state">
+        <p>No frequent items yet. Start shopping to build this list.</p>
+      </div>
+    <% } else { %>
+      <div class="card-grid">
+        <% frequent.slice(0,4).forEach(product => { %>
+          <div class="product-card">
+            <img src="/images/<%= product.image %>" alt="<%= product.productName %>">
+            <h3 class="mt-2"><%= product.productName %></h3>
+            <p class="subtle-text mb-1">Origin: <%= product.origin || 'Not specified' %></p>
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="price-tag">$<%= Number(product.price || 0).toFixed(2) %></span>
+              <a class="btn btn-link" href="/product/<%= product.id %>">See details</a>
             </div>
-            <span class="chip"><%= category.name %></span>
-            <ul class="list-unstyled m-0 mt-3">
-              <% category.items.slice(0, 3).forEach(item => { %>
-                <li class="subtle-text mb-1">- <%= item.productName %></li>
-              <% }) %>
-            </ul>
-            <a class="btn btn-link mt-2" href="/shopping?<%= `category=${encodeURIComponent(category.name)}` %>">View all</a>
           </div>
-        <% } %>
-      <% }) %>
-    </div>
-  <% } %>
-</section>
+        <% }) %>
+      </div>
+    <% } %>
+  </section>
+<% } %>
 
 <%- include('partials/footer') %>

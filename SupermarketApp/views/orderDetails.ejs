@@ -6,7 +6,12 @@
       <h2 class="section-title mb-1">Order #<%= order.id %></h2>
       <p class="subtle-text mb-0">Placed on <%= order.created_at.toLocaleString() %></p>
     </div>
-    <a class="btn btn-secondary" href="/orders">Back to orders</a>
+    <div class="d-flex gap-2">
+      <form action="/orders/<%= order.id %>/reorder" method="POST" class="m-0">
+        <button type="submit" class="btn btn-primary">Order all again</button>
+      </form>
+      <a class="btn btn-secondary" href="/orders">Back to orders</a>
+    </div>
   </div>
 
   <div class="split-layout">
@@ -22,9 +27,14 @@
         <span><%= order.items.length %></span>
       </div>
       <% if (order.notes) { %>
+        <% const noteLines = (order.notes || '').split(/\n/).filter(Boolean); %>
         <div class="note-card mt-3 text-start">
-          <strong>Delivery notes</strong>
-          <p class="mb-0"><%= order.notes %></p>
+          <strong>Customer & delivery</strong>
+          <ul class="mb-0 ps-3">
+            <% noteLines.forEach(line => { %>
+              <li><%= line %></li>
+            <% }) %>
+          </ul>
         </div>
       <% } %>
     </div>
@@ -38,6 +48,7 @@
             <th>Price</th>
             <th>Qty</th>
             <th>Subtotal</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -47,12 +58,30 @@
               <td>$<%= item.price.toFixed(2) %></td>
               <td><%= item.quantity %></td>
               <td>$<%= (item.price * item.quantity).toFixed(2) %></td>
+              <td>
+                <form action="/add-to-cart/<%= item.product_id %>" method="POST" class="m-0">
+                  <input type="hidden" name="quantity" value="<%= item.quantity %>">
+                  <button type="submit" class="btn btn-link">Order again</button>
+                </form>
+              </td>
             </tr>
           <% }) %>
         </tbody>
       </table>
     </div>
   </div>
+
+  <% if (order.notes) { %>
+    <% const noteLines = (order.notes || '').split(/\n/).filter(Boolean); %>
+    <div class="glass-panel mt-3">
+      <h5>Customer details</h5>
+      <ul class="mb-0 ps-3">
+        <% noteLines.forEach(line => { %>
+          <li><%= line %></li>
+        <% }) %>
+      </ul>
+    </div>
+  <% } %>
 </section>
 
 <%- include('partials/footer') %>

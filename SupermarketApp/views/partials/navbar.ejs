@@ -11,7 +11,6 @@
         <li><a href="/orders">Orders</a></li>
       <% } else if (currentUser) { %>
         <li><a href="/shopping">Shop</a></li>
-        <li><a href="/cart">Cart</a></li>
         <li><a href="/orders">Orders</a></li>
       <% } else { %>
         <li><a href="/login">Login</a></li>
@@ -25,11 +24,16 @@
           <span class="avatar-circle"><%= currentUser.username ? currentUser.username.charAt(0).toUpperCase() : 'U' %></span>
           <span>
             Hi, <strong><%= currentUser.username || 'User' %></strong>
-            <span class="badge-pill"><%= currentUser.role %></span>
+            <span class="badge-pill"><%= String(currentUser.role || '').trim().toUpperCase() %></span>
           </span>
         </div>
         <% if (currentUser.role !== 'admin') { %>
-          <a class="btn btn-secondary" href="/cart">Cart</a>
+          <a class="btn btn-secondary cart-btn" href="/cart">
+            Cart
+            <% if (typeof cartCount !== 'undefined') { %>
+              <span class="cart-badge"><%= cartCount %></span>
+            <% } %>
+          </a>
         <% } %>
         <a class="btn btn-primary" href="/logout">Logout</a>
       <% } else { %>

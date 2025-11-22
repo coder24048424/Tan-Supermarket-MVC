@@ -45,6 +45,8 @@ app.use(flash());
 // Make the logged-in user available in every view
 app.use((req, res, next) => {
     res.locals.user = req.session.user || null;
+    const cart = req.session.cart || [];
+    res.locals.cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     next();
 });
 
@@ -93,7 +95,8 @@ app.get('/', (req, res) => {
             return res.render('index', {
                 user: req.session.user,
                 bestSeller: null,
-                categories: []
+                categories: [],
+                newProducts: []
             });
         }
 
@@ -103,11 +106,15 @@ app.get('/', (req, res) => {
         }, null);
 
         const categories = buildCategories(products);
+        const newProducts = [...products]
+            .sort((a, b) => (b.id || 0) - (a.id || 0))
+            .slice(0, 4);
 
         res.render('index', {
             user: req.session.user,
             bestSeller,
-            categories
+            categories,
+            newProducts
         });
     });
 });
@@ -148,6 +155,12 @@ app.post('/login', (req, res) => {
         }
 
         req.session.user = match;
+        // Keep cart for the same user across logins; clear it if a different user logs in
+        const previousOwnerId = req.session.lastCartUserId;
+        if (previousOwnerId && previousOwnerId !== match.id) {
+            req.session.cart = [];
+        }
+        req.session.lastCartUserId = match.id;
         req.flash('success', 'Login successful!');
 
         if (match.role === 'admin') return res.redirect('/inventory');
@@ -157,7 +170,12 @@ app.post('/login', (req, res) => {
 
 // Logout
 app.get('/logout', (req, res) => {
-    req.session.destroy(() => res.redirect('/'));
+    if (req.session) {
+        req.session.lastCartUserId = req.session.user ? req.session.user.id : req.session.lastCartUserId;
+        // Keep the cart in session so it can be restored on the next login by the same user
+        req.session.user = null;
+    }
+    res.redirect('/');
 });
 
 // ========================
@@ -294,6 +312,17 @@ app.get('/orders', checkAuthenticated, (req, res) =>
 app.get('/orders/:id', checkAuthenticated, (req, res) =>
     OrdersController.getOrderById(req, res)
 );
+
+// Reorder all items from a past order into the cart
+app.post('/orders/:id/reorder', checkAuthenticated, (req, res) => {
+    const orderId = parseInt(req.params.id, 10);
+    if (Number.isNaN(orderId)) {
+        req.flash('error', 'Invalid order.');
+        return res.redirect('/orders');
+    }
+
+    OrdersController.reorder(req, res, orderId);
+});
 
 // ========================
 // START SERVER
