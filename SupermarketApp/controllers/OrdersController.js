@@ -133,7 +133,7 @@ function OrdersController() {
 
         const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-        OrdersModel.createOrder(user.id, normalizedItems, total, notes, (orderErr) => {
+        OrdersModel.createOrder(user.id, normalizedItems, total, notes, 'pending', (orderErr) => {
           if (orderErr) {
             console.error('Order creation failed:', orderErr);
             if (orderErr.code === 'INSUFFICIENT_STOCK') {
@@ -177,26 +177,90 @@ function OrdersController() {
     // VIEW ORDER DETAILS
     // ===============================
     getOrderById(req, res) {
-      const user = req.session.user;
+      const sessionUser = req.session.user;
       const orderId = parseInt(req.params.id, 10);
 
-      if (!user || Number.isNaN(orderId)) {
+      if (!sessionUser || Number.isNaN(orderId)) {
         req.flash('error', 'Invalid order');
         return res.redirect('/orders');
       }
 
-      OrdersModel.getOrderById(orderId, user.id, (err, order) => {
+      const allowAdmin = sessionUser.role === 'admin';
+
+      const renderOrder = (order) => res.render('orderDetails', {
+        order,
+        user: sessionUser
+      });
+
+      OrdersModel.getOrderById(orderId, sessionUser.id, (err, order) => {
         if (err)
           return res.status(500).render('error', { message: 'Failed to load order' });
+
+        if (!order && allowAdmin) {
+          // Try loading without user constraint for admins
+          return OrdersModel.getOrderById(orderId, null, (err2, adminOrder) => {
+            if (err2 || !adminOrder) {
+              req.flash('error', 'Order not found');
+              return res.redirect('/orders');
+            }
+            return renderOrder(adminOrder);
+          });
+        }
 
         if (!order) {
           req.flash('error', 'Order not found');
           return res.redirect('/orders');
         }
 
-        return res.render('orderDetails', {
-          order,
-          user
+        return renderOrder(order);
+      });
+    },
+
+    // ===============================
+    // ADMIN: UPDATE ORDER STATUS
+    // ===============================
+    updateStatus(req, res) {
+      const sessionUser = req.session.user;
+      if (!sessionUser || sessionUser.role !== 'admin') {
+        req.flash('error', 'Access denied');
+        return res.redirect('/orders');
+      }
+      const orderId = parseInt(req.params.id, 10);
+      const { status } = req.body;
+      if (Number.isNaN(orderId) || !status) {
+        req.flash('error', 'Invalid order or status');
+        return res.redirect('/orders');
+      }
+
+      OrdersModel.updateOrderStatus(orderId, status, (err, result) => {
+        if (err || !result.affectedRows) {
+          console.error('Failed to update order status:', err);
+          req.flash('error', 'Could not update order status.');
+          return res.redirect('/orders');
+        }
+        req.flash('success', `Order #${orderId} marked as ${status}.`);
+        return res.redirect(`/orders/${orderId}`);
+      });
+    },
+
+    // ===============================
+    // ADMIN: LIST ALL ORDERS
+    // ===============================
+    adminList(req, res) {
+      const errors = req.flash('error');
+      const success = req.flash('success');
+
+      OrdersModel.getAllOrders((err, orders = []) => {
+        if (err) {
+          console.error('Failed to load orders for admin:', err);
+          return res.status(500).render('error', { message: 'Failed to load orders' });
+        }
+
+        return res.render('adminOrders', {
+          user: req.session.user,
+          orders,
+          errors,
+          success
         });
       });
     },

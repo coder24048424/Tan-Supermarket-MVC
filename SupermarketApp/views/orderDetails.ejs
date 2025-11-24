@@ -20,7 +20,9 @@
       <p class="summary-total">$<%= order.total.toFixed(2) %></p>
       <div class="summary-row">
         <span>Status</span>
-        <span class="status-pill success">Delivered</span>
+        <% const status = (order.status || 'delivered').toLowerCase(); %>
+        <% const statusClass = status === 'pending' ? 'warning' : 'success'; %>
+        <span class="status-pill <%= statusClass %>"><%= status === 'pending' ? 'Pending' : 'Delivered' %></span>
       </div>
       <div class="summary-row">
         <span>Items</span>
@@ -36,6 +38,13 @@
             <% }) %>
           </ul>
         </div>
+      <% } %>
+
+      <% if (user && user.role === 'admin' && status === 'pending') { %>
+        <form action="/orders/<%= order.id %>/status" method="POST" class="mt-3">
+          <input type="hidden" name="status" value="delivered">
+          <button type="submit" class="btn btn-primary">Mark as delivered</button>
+        </form>
       <% } %>
     </div>
 

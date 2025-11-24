@@ -9,7 +9,8 @@ const UserController = require('./controllers/UserController');
 const OrdersController = require('./controllers/OrdersController');
 const ProductModel = require('./models/ProductModel');
 const UserModel = require('./models/UserModel');
-const { buildCategories } = require('./utils/catalog');
+const OrdersModel = require('./models/OrdersModel');
+const { buildCategories, CATEGORY_NAMES } = require('./utils/catalog');
 
 const app = express();
 
@@ -44,9 +45,14 @@ app.use(flash());
 
 // Make the logged-in user available in every view
 app.use((req, res, next) => {
-    res.locals.user = req.session.user || null;
+    const rawUser = req.session.user || null;
+    const isAdmin = rawUser && rawUser.role === 'admin';
+    const viewAsUser = Boolean(isAdmin && req.session.viewAsUser);
+    res.locals.viewMode = isAdmin ? (viewAsUser ? 'user' : 'admin') : null;
+    res.locals.user = viewAsUser ? { ...rawUser, role: 'user' } : rawUser;
     const cart = req.session.cart || [];
     res.locals.cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    res.locals.navCategories = CATEGORY_NAMES;
     next();
 });
 
@@ -66,16 +72,23 @@ const checkAdmin = (req, res, next) => {
 };
 
 const validateRegistration = (req, res, next) => {
-    const { username, email, password, address, contact } = req.body;
+    const { username, email, password, confirmPassword, address, contact } = req.body;
 
-    if (!username || !email || !password || !address || !contact) {
+    if (!username || !email || !password || !confirmPassword || !address || !contact) {
         req.flash('error', 'All fields are required.');
         req.flash('formData', req.body);
         return res.redirect('/register');
     }
 
-    if (password.length < 6) {
-        req.flash('error', 'Password must be at least 6 characters.');
+    if (password !== confirmPassword) {
+        req.flash('error', 'Passwords must match.');
+        req.flash('formData', req.body);
+        return res.redirect('/register');
+    }
+
+    const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+    if (!strongPassword.test(password)) {
+        req.flash('error', 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
         req.flash('formData', req.body);
         return res.redirect('/register');
     }
@@ -89,6 +102,8 @@ const validateRegistration = (req, res, next) => {
 
 // Home
 app.get('/', (req, res) => {
+    const isAdmin = req.session.user && req.session.user.role === 'admin' && res.locals.viewMode !== 'user';
+
     ProductModel.getAllProducts((err, products = []) => {
         if (err) {
             console.error('Failed to load products for homepage:', err);
@@ -96,7 +111,8 @@ app.get('/', (req, res) => {
                 user: req.session.user,
                 bestSeller: null,
                 categories: [],
-                newProducts: []
+                newProducts: [],
+                adminStats: null
             });
         }
 
@@ -109,13 +125,34 @@ app.get('/', (req, res) => {
         const newProducts = [...products]
             .sort((a, b) => (b.id || 0) - (a.id || 0))
             .slice(0, 4);
+        const lowStockItems = products
+            .filter(p => (Number(p.quantity) || 0) <= 10)
+            .sort((a, b) => (Number(a.quantity) || 0) - (Number(b.quantity) || 0))
+            .slice(0, 5);
 
-        res.render('index', {
+        const renderPage = (adminStats = null) => res.render('index', {
             user: req.session.user,
             bestSeller,
             categories,
-            newProducts
+            newProducts,
+            adminStats
         });
+
+        if (isAdmin) {
+            OrdersModel.getOrderStats((statsErr, adminStats) => {
+                if (statsErr) {
+                    console.error('Failed to load admin order stats:', statsErr);
+                    return renderPage(null);
+                }
+                return renderPage({
+                    ...adminStats,
+                    lowStockItems,
+                    lowStockCount: lowStockItems.length
+                });
+            });
+        } else {
+            renderPage(null);
+        }
     });
 });
 
@@ -284,6 +321,23 @@ app.get('/deleteProduct/:id', checkAuthenticated, checkAdmin, (req, res) =>
     ProductController.deleteProduct(req, res)
 );
 
+// Admin user management
+app.get('/admin/users', checkAuthenticated, checkAdmin, (req, res) =>
+    UserController.adminListUsers(req, res)
+);
+app.get('/admin/users/:id/edit', checkAuthenticated, checkAdmin, (req, res) =>
+    UserController.adminEditForm(req, res)
+);
+app.post('/admin/users/:id/edit', checkAuthenticated, checkAdmin, (req, res) =>
+    UserController.adminUpdateUser(req, res)
+);
+app.post('/admin/users/:id/delete', checkAuthenticated, checkAdmin, (req, res) =>
+    UserController.adminDeleteUser(req, res)
+);
+app.get('/admin/users/:id/orders', checkAuthenticated, checkAdmin, (req, res) =>
+    UserController.adminUserOrders(req, res)
+);
+
 // Product detail
 app.get('/product/:id', checkAuthenticated, (req, res) =>
     ProductController.getProductById(req, res)
@@ -311,6 +365,15 @@ app.get('/orders', checkAuthenticated, (req, res) =>
 // Order details
 app.get('/orders/:id', checkAuthenticated, (req, res) =>
     OrdersController.getOrderById(req, res)
+);
+
+app.post('/orders/:id/status', checkAuthenticated, checkAdmin, (req, res) =>
+    OrdersController.updateStatus(req, res)
+);
+
+// Admin orders list
+app.get('/admin/orders', checkAuthenticated, checkAdmin, (req, res) =>
+    OrdersController.adminList(req, res)
 );
 
 // Reorder all items from a past order into the cart

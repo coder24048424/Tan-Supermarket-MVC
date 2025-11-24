@@ -1,0 +1,61 @@
+<%- include('partials/head', { pageTitle: 'User orders', bodyClass: 'page-users' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Orders for <%= userProfile.username %></h2>
+      <p class="subtle-text mb-0"><%= userProfile.email %> | Role: <%= (userProfile.role || '').toUpperCase() %></p>
+    </div>
+    <a class="btn btn-secondary" href="/admin/users">Back to users</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <% if (!orders || !orders.length) { %>
+    <div class="empty-state">
+      <p>No orders found for this user.</p>
+    </div>
+  <% } else { %>
+    <div class="table-responsive">
+      <table class="table-modern w-100">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Items</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% orders.forEach(order => { %>
+            <tr>
+              <td>#<%= order.id %></td>
+              <td><%= order.created_at ? new Date(order.created_at).toLocaleString() : '' %></td>
+              <td><%= (order.status || 'pending').toUpperCase() %></td>
+              <td>$<%= Number(order.total || 0).toFixed(2) %></td>
+              <td><%= order.items ? order.items.length : 0 %></td>
+              <td><%= order.notes || '' %></td>
+              <td>
+                <a class="btn btn-link" href="/orders/<%= order.id %>">View</a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>
