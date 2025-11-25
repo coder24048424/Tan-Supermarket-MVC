@@ -32,6 +32,7 @@
             <th>ID</th>
             <th>Date</th>
             <th>Status</th>
+            <th>Refund</th>
             <th>Total</th>
             <th>Items</th>
             <th>Notes</th>
@@ -40,10 +41,20 @@
         </thead>
         <tbody>
           <% orders.forEach(order => { %>
+            <% const refundStatus = order.refundStatus || 'none'; %>
             <tr>
               <td>#<%= order.id %></td>
               <td><%= order.created_at ? new Date(order.created_at).toLocaleString() : '' %></td>
               <td><%= (order.status || 'pending').toUpperCase() %></td>
+              <td>
+                <% if (refundStatus === 'refunded') { %>
+                  <span class="status-pill danger">Refunded</span>
+                <% } else if (refundStatus === 'refund_pending') { %>
+                  <span class="status-pill warning">Pending</span>
+                <% } else { %>
+                  <span class="subtle-text">-</span>
+                <% } %>
+              </td>
               <td>$<%= Number(order.total || 0).toFixed(2) %></td>
               <td><%= order.items ? order.items.length : 0 %></td>
               <td><%= order.notes || '' %></td>

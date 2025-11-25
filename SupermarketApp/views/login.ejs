@@ -2,9 +2,8 @@
 
 <section class="auth-layout glass-panel">
   <div class="auth-hero">
-    <span class="badge-pill">Welcome back</span>
     <h1>Sign in</h1>
-    <p class="subtle-text">Access your curated grocery dashboard inspired by the Dribbble layout.</p>
+    <p class="subtle-text">Welcome to Tan’s Supermarket. Shop trusted essentials and fresh produce with confidence.</p>
   </div>
 
   <% if (errors && errors.length) { %>
@@ -21,9 +20,9 @@
         <div><%= message %></div>
       <% }) %>
     </div>
-  <% } %>
+<% } %>
 
-  <form action="/login" method="POST" class="d-grid gap-3">
+<form action="/login" method="POST" class="d-grid gap-3">
     <div>
       <label for="email" class="form-label">Email</label>
       <input type="email" id="email" name="email" class="form-control" required>
@@ -31,12 +30,35 @@
 
     <div>
       <label for="password" class="form-label">Password</label>
-      <input type="password" id="password" name="password" class="form-control" required>
+      <div class="password-field">
+        <input type="password" id="password" name="password" class="form-control" required>
+        <button type="button" class="password-toggle" aria-label="Toggle password visibility">Show</button>
+      </div>
     </div>
 
-    <button type="submit" class="btn btn-primary">Login</button>
-    <p class="subtle-text text-center mb-0">No account yet? <a href="/register">Create one</a></p>
-  </form>
+  <button type="submit" class="btn btn-primary">Login</button>
+  <p class="subtle-text text-center mb-0">No account yet? <a href="/register">Create one</a></p>
+</form>
 </section>
+
+<script>
+  (() => {
+    const toggle = document.querySelector('.password-toggle');
+    const input = document.querySelector('#password');
+    if (!toggle || !input) return;
+    toggle.addEventListener('click', () => {
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+      toggle.textContent = isPassword ? 'Hide' : 'Show';
+    });
+  })();
+
+  (() => {
+    const errors = <%- JSON.stringify(errors || []) %>;
+    if (Array.isArray(errors) && errors.length) {
+      alert(errors.join('\n'));
+    }
+  })();
+</script>
 
 <%- include('partials/footer') %>

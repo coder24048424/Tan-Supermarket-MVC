@@ -1,0 +1,63 @@
+<%- include('partials/head', { pageTitle: 'Manage users', bodyClass: 'page-users' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">User management</h2>
+      <p class="subtle-text mb-0">View details, edit roles, reset passwords, or deactivate accounts.</p>
+    </div>
+    <a class="btn btn-secondary" href="/inventory">Back to inventory</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <% if (!users || !users.length) { %>
+    <div class="empty-state">
+      <p>No users found.</p>
+    </div>
+  <% } else { %>
+    <div class="table-responsive">
+      <table class="table-modern w-100">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Contact</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% users.forEach(u => { %>
+            <tr>
+              <td><%= u.id %></td>
+              <td><%= u.username %></td>
+              <td><%= u.email %></td>
+              <td><span class="chip"><%= (u.role || '').toUpperCase() %></span></td>
+              <td><%= u.contact || '-' %></td>
+              <td class="d-flex gap-2">
+                <a class="btn btn-secondary" href="/admin/users/<%= u.id %>/edit">Edit</a>
+                <a class="btn btn-link" href="/admin/users/<%= u.id %>/orders">Orders</a>
+                <form action="/admin/users/<%= u.id %>/delete" method="POST" onsubmit="return confirm('Delete this user?');">
+                  <button type="submit" class="btn btn-link">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

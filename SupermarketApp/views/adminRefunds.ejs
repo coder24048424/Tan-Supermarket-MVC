@@ -1,0 +1,70 @@
+<%- include('partials/head', { pageTitle: 'Refund requests', bodyClass: 'page-refunds' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Refund requests</h2>
+      <p class="subtle-text mb-0">Manage pending refund submissions from customers.</p>
+    </div>
+    <a class="btn btn-secondary" href="/orders">Back to orders</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <% if (!refunds || !refunds.length) { %>
+    <div class="empty-state">
+      <p>No refund requests at the moment.</p>
+    </div>
+  <% } else { %>
+    <div class="table-responsive">
+      <table class="table-modern w-100">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Order</th>
+            <th>User</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Reason</th>
+            <th>Created</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% refunds.forEach(r => { %>
+            <tr>
+              <td>#<%= r.id %></td>
+              <td><a href="/orders/<%= r.order_id %>">Order #<%= r.order_id %></a></td>
+              <td><%= r.username || 'Unknown' %></td>
+              <td>$<%= Number(r.amount || 0).toFixed(2) %></td>
+              <td><span class="status-pill"><%= (r.status || 'pending').toUpperCase() %></span></td>
+              <td style="max-width:280px;"><%= r.reason || 'No reason provided' %></td>
+              <td><%= r.created_at ? new Date(r.created_at).toLocaleString() : '' %></td>
+              <td>
+                <form action="/admin/refunds/<%= r.id %>/status" method="POST" class="d-flex gap-2 align-items-center m-0">
+                  <select name="status" class="form-select form-select-sm">
+                    <% ['pending','approved','processed','rejected'].forEach(opt => { %>
+                      <option value="<%= opt %>" <%= (r.status || '').toLowerCase() === opt ? 'selected' : '' %>><%= opt %></option>
+                    <% }) %>
+                  </select>
+                  <button type="submit" class="btn btn-primary btn-sm">Update</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

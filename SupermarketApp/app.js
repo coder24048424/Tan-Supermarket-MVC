@@ -7,9 +7,11 @@ const crypto = require('crypto');
 const ProductController = require('./controllers/ProductController');
 const UserController = require('./controllers/UserController');
 const OrdersController = require('./controllers/OrdersController');
+const RefundController = require('./controllers/RefundController');
 const ProductModel = require('./models/ProductModel');
 const UserModel = require('./models/UserModel');
-const OrdersModel = require('./models/OrdersModel');
+const RefundModel = require('./models/RefundModel');
+const UserCartModel = require('./models/UserCartModel');
 const { buildCategories, CATEGORY_NAMES } = require('./utils/catalog');
 
 const app = express();
@@ -43,16 +45,31 @@ app.use(session({
 
 app.use(flash());
 
+// Keep cart in sync across sessions/browsers by hydrating from DB for logged-in users
+app.use((req, res, next) => {
+    const user = req.session.user;
+    if (!user) return next();
+    UserCartModel.getCartForUser(user.id, (err, cart = []) => {
+        if (!err) {
+            req.session.cart = cart;
+        }
+        return next();
+    });
+});
+
 // Make the logged-in user available in every view
 app.use((req, res, next) => {
-    const rawUser = req.session.user || null;
-    const isAdmin = rawUser && rawUser.role === 'admin';
-    const viewAsUser = Boolean(isAdmin && req.session.viewAsUser);
-    res.locals.viewMode = isAdmin ? (viewAsUser ? 'user' : 'admin') : null;
-    res.locals.user = viewAsUser ? { ...rawUser, role: 'user' } : rawUser;
+    res.locals.user = req.session.user || null;
     const cart = req.session.cart || [];
     res.locals.cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
     res.locals.navCategories = CATEGORY_NAMES;
+    res.locals.pendingRefundCount = 0;
+    if (res.locals.user && res.locals.user.role === 'admin') {
+        return RefundModel.getPendingCount((err, count) => {
+            if (!err) res.locals.pendingRefundCount = count;
+            return next();
+        });
+    }
     next();
 });
 
@@ -102,8 +119,6 @@ const validateRegistration = (req, res, next) => {
 
 // Home
 app.get('/', (req, res) => {
-    const isAdmin = req.session.user && req.session.user.role === 'admin' && res.locals.viewMode !== 'user';
-
     ProductModel.getAllProducts((err, products = []) => {
         if (err) {
             console.error('Failed to load products for homepage:', err);
@@ -111,8 +126,7 @@ app.get('/', (req, res) => {
                 user: req.session.user,
                 bestSeller: null,
                 categories: [],
-                newProducts: [],
-                adminStats: null
+                newProducts: []
             });
         }
 
@@ -125,34 +139,13 @@ app.get('/', (req, res) => {
         const newProducts = [...products]
             .sort((a, b) => (b.id || 0) - (a.id || 0))
             .slice(0, 4);
-        const lowStockItems = products
-            .filter(p => (Number(p.quantity) || 0) <= 10)
-            .sort((a, b) => (Number(a.quantity) || 0) - (Number(b.quantity) || 0))
-            .slice(0, 5);
 
-        const renderPage = (adminStats = null) => res.render('index', {
+        res.render('index', {
             user: req.session.user,
             bestSeller,
             categories,
-            newProducts,
-            adminStats
+            newProducts
         });
-
-        if (isAdmin) {
-            OrdersModel.getOrderStats((statsErr, adminStats) => {
-                if (statsErr) {
-                    console.error('Failed to load admin order stats:', statsErr);
-                    return renderPage(null);
-                }
-                return renderPage({
-                    ...adminStats,
-                    lowStockItems,
-                    lowStockCount: lowStockItems.length
-                });
-            });
-        } else {
-            renderPage(null);
-        }
     });
 });
 
@@ -200,8 +193,13 @@ app.post('/login', (req, res) => {
         req.session.lastCartUserId = match.id;
         req.flash('success', 'Login successful!');
 
-        if (match.role === 'admin') return res.redirect('/inventory');
-        return res.redirect('/shopping');
+        return UserCartModel.getCartForUser(match.id, (cartErr, cart = []) => {
+            if (!cartErr) {
+                req.session.cart = cart;
+            }
+            if (match.role === 'admin') return res.redirect('/inventory');
+            return res.redirect('/shopping');
+        });
     });
 });
 
@@ -231,44 +229,63 @@ app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => {
     const productId = parseInt(req.params.id, 10);
     const quantity = parseInt(req.body.quantity, 10) || 1;
 
-    ProductModel.getProductById(productId, (err, product) => {
-        if (err || !product) {
-            req.flash('error', 'Unable to add this product right now.');
-            return res.redirect('/shopping');
-        }
+    UserCartModel.getCartForUser(req.session.user.id, (cartErr, persistedCart = []) => {
+        if (!cartErr) req.session.cart = persistedCart;
+        const wasEmpty = !req.session.cart || req.session.cart.length === 0;
 
-        if (!req.session.cart) req.session.cart = [];
+        ProductModel.getProductById(productId, (err, product) => {
+            if (err || !product) {
+                req.flash('error', 'Unable to add this product right now.');
+                return res.redirect('/shopping');
+            }
 
-        const existing = req.session.cart.find(i => i.productId === productId);
-        const available = Number(product.quantity) || 0;
+            if (!req.session.cart) req.session.cart = [];
 
-        if (available === 0) {
-            req.flash('error', `${product.productName} is currently out of stock.`);
-            return res.redirect('/shopping');
-        }
+            const existing = req.session.cart.find(i => i.productId === productId);
+            const available = Number(product.quantity) || 0;
 
-        const existingQty = existing ? existing.quantity : 0;
-        const desiredQty = existingQty + quantity;
+            if (available === 0) {
+                req.flash('error', `${product.productName} is currently out of stock.`);
+                return res.redirect('/shopping');
+            }
 
-        if (desiredQty > available) {
-            req.flash('error', `${product.productName} only has ${available} left. Adjust the quantity in your cart.`);
-            return res.redirect('/shopping');
-        }
+            const existingQty = existing ? existing.quantity : 0;
+            const desiredQty = existingQty + quantity;
 
-        if (existing) {
-            existing.quantity = desiredQty;
-        } else {
-            req.session.cart.push({
-                productId: product.id,
-                productName: product.productName,
-                price: product.price,
-                quantity,
-                image: product.image
+            let nextQuantity = desiredQty;
+            let capped = false;
+            if (desiredQty > available) {
+                nextQuantity = available;
+                capped = true;
+            }
+
+            if (existing) {
+                existing.quantity = nextQuantity;
+            } else {
+                req.session.cart.push({
+                    productId: product.id,
+                    productName: product.productName,
+                    price: product.price,
+                    quantity: nextQuantity,
+                    image: product.image
+                });
+            }
+
+            return UserCartModel.setItemQuantity(req.session.user.id, product.id, nextQuantity, (persistErr) => {
+                if (persistErr) {
+                    console.error('Failed to persist cart item:', persistErr);
+                    req.flash('error', 'Unable to update your cart right now.');
+                    return res.redirect('/shopping');
+                }
+                const destination = '/cart';
+                if (capped) {
+                    req.flash('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
+                } else {
+                    req.flash('success', `${product.productName} added to your cart.`);
+                }
+                return res.redirect(destination);
             });
-        }
-
-        req.flash('success', `${product.productName} added to your cart.`);
-        res.redirect('/cart');
+        });
     });
 });
 
@@ -289,9 +306,94 @@ app.get('/remove-from-cart/:id', checkAuthenticated, (req, res) => {
     if (!req.session.cart) req.session.cart = [];
 
     req.session.cart = req.session.cart.filter(item => item.productId !== productId);
+    UserCartModel.removeItem(req.session.user.id, productId, (err) => {
+        if (err) {
+            console.error('Failed to remove cart item:', err);
+            req.flash('error', 'Unable to remove item right now.');
+            return res.redirect('/cart');
+        }
+        req.flash('success', 'Item removed.');
+        return res.redirect('/cart');
+    });
+});
 
-    req.flash('success', 'Item removed.');
-    res.redirect('/cart');
+// Clear entire cart
+app.post('/cart/clear', checkAuthenticated, (req, res) => {
+    if (!req.session.cart) req.session.cart = [];
+    req.session.cart = [];
+    UserCartModel.clearCart(req.session.user.id, (err) => {
+        if (err) {
+            console.error('Failed to clear cart:', err);
+            req.flash('error', 'Unable to clear cart right now.');
+            return res.redirect('/cart');
+        }
+        req.flash('success', 'Cart cleared.');
+        return res.redirect('/cart');
+    });
+});
+
+// Update quantity in cart
+app.post('/cart/update/:id', checkAuthenticated, (req, res) => {
+    const productId = parseInt(req.params.id, 10);
+    const quantity = parseInt(req.body.quantity, 10);
+    const delta = parseInt(req.body.delta, 10);
+
+    if (Number.isNaN(productId)) {
+        req.flash('error', 'Invalid product.');
+        return res.redirect('/cart');
+    }
+
+    if (!req.session.cart) req.session.cart = [];
+
+    ProductModel.getProductById(productId, (err, product) => {
+        if (err || !product) {
+            req.flash('error', 'Unable to update this item right now.');
+            return res.redirect('/cart');
+        }
+
+        const existing = req.session.cart.find(i => i.productId === productId);
+        if (!existing) {
+            req.flash('error', 'Item not found in cart.');
+            return res.redirect('/cart');
+        }
+
+        const available = Number(product.quantity) || 0;
+        const currentQty = existing.quantity || 0;
+        let desiredQty;
+        if (!Number.isNaN(delta)) {
+            desiredQty = currentQty + delta;
+        } else {
+            desiredQty = Number.isNaN(quantity) ? currentQty : quantity;
+        }
+
+        const sanitizedQty = Math.max(0, desiredQty);
+        const nextQuantity = Math.min(sanitizedQty, available);
+
+        const applyUpdate = (cb) => {
+            if (nextQuantity === 0) {
+                req.session.cart = req.session.cart.filter(i => i.productId !== productId);
+                return UserCartModel.removeItem(req.session.user.id, productId, cb);
+            }
+            existing.quantity = nextQuantity;
+            return UserCartModel.setItemQuantity(req.session.user.id, productId, nextQuantity, cb);
+        };
+
+        applyUpdate((persistErr) => {
+            if (persistErr) {
+                console.error('Failed to update cart quantity:', persistErr);
+                req.flash('error', 'Unable to update cart right now.');
+                return res.redirect('/cart');
+            }
+            if (nextQuantity === 0) {
+                req.flash('success', 'Item removed.');
+            } else if (sanitizedQty > available) {
+                req.flash('error', `${product.productName} only has ${available} in stock. Quantity adjusted.`);
+            } else {
+                req.flash('success', 'Quantity updated.');
+            }
+            return res.redirect('/cart');
+        });
+    });
 });
 
 // ========================
@@ -310,7 +412,7 @@ app.post('/addProduct', checkAuthenticated, checkAdmin, upload.single('image'), 
 );
 
 app.get('/updateProduct/:id', checkAuthenticated, checkAdmin, (req, res) =>
-    ProductController.getProductById(req, res)
+    ProductController.editProductView(req, res)
 );
 
 app.post('/updateProduct/:id', checkAuthenticated, checkAdmin, upload.single('image'), (req, res) =>
@@ -367,13 +469,27 @@ app.get('/orders/:id', checkAuthenticated, (req, res) =>
     OrdersController.getOrderById(req, res)
 );
 
+// Admin order management
 app.post('/orders/:id/status', checkAuthenticated, checkAdmin, (req, res) =>
     OrdersController.updateStatus(req, res)
 );
-
-// Admin orders list
-app.get('/admin/orders', checkAuthenticated, checkAdmin, (req, res) =>
-    OrdersController.adminList(req, res)
+app.post('/orders/:id/refund', checkAuthenticated, checkAdmin, (req, res) =>
+    RefundController.createRefund(req, res)
+);
+app.post('/orders/:id/refund-request', checkAuthenticated, (req, res) =>
+    RefundController.requestRefund(req, res)
+);
+app.get('/orders/:id/refunds', checkAuthenticated, checkAdmin, (req, res) =>
+    RefundController.listByOrder(req, res)
+);
+app.post('/refunds/:id/status', checkAuthenticated, checkAdmin, (req, res) =>
+    RefundController.updateStatus(req, res)
+);
+app.get('/admin/refunds', checkAuthenticated, checkAdmin, (req, res) =>
+    RefundController.listAll(req, res)
+);
+app.post('/admin/refunds/:id/status', checkAuthenticated, checkAdmin, (req, res) =>
+    RefundController.updateStatus(req, res)
 );
 
 // Reorder all items from a past order into the cart

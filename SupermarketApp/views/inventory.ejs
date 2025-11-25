@@ -3,9 +3,7 @@
 <section class="glass-panel">
   <div class="d-flex justify-content-between flex-wrap gap-2 align-items-end">
     <div>
-      <span class="badge-pill">Admin view</span>
       <h2 class="section-title mb-1">Inventory overview</h2>
-      <p class="subtle-text mb-0">Responsive cards echoing the Dribbble inspiration.</p>
     </div>
     <div class="d-flex gap-2">
       <a class="btn btn-secondary" href="/addProduct">Add product</a>
@@ -92,7 +90,7 @@
             </div>
             <span class="chip <%= stockClass %>"><%= product.quantity %> in stock</span>
           </div>
-          <img src="/images/<%= product.image %>" alt="<%= product.productName %>" style="width:100%;height:160px;object-fit:cover;border-radius:18px;">
+          <img class="inventory-image" src="/images/<%= product.image %>" alt="<%= product.productName %>">
           <div class="d-flex justify-content-between align-items-center mt-2">
             <span class="price-tag">$<%= product.price.toFixed(2) %></span>
             <a href="/product/<%= product.id %>" class="btn btn-link">Details</a>

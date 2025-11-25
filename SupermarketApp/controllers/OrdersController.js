@@ -1,5 +1,7 @@
 const OrdersModel = require('../models/OrdersModel');
+const RefundModel = require('../models/RefundModel');
 const ProductModel = require('../models/ProductModel');
+const UserCartModel = require('../models/UserCartModel');
 
 function OrdersController() {
   return {
@@ -46,26 +48,19 @@ function OrdersController() {
       if (!user) return res.redirect('/login');
 
       const cart = req.session.cart || [];
-      const firstName = (req.body.firstName || '').trim();
-      const lastName = (req.body.lastName || '').trim();
-      const company = (req.body.company || '').trim();
-      const address = (req.body.address || '').trim();
-      const apartment = (req.body.apartment || '').trim();
-      const postalCode = (req.body.postalCode || '').trim();
-      const phone = (req.body.phone || '').trim();
+      const firstName = (req.body.firstName || user.username || '').trim();
+      const address = (req.body.address || user.address || '').trim();
+      const phone = (req.body.phone || user.contact || '').trim();
       const notesInput = (req.body.notes || '').trim();
 
-      if (!firstName || !lastName || !address || !postalCode || !phone) {
-        req.flash('error', 'Please enter your name, address, postal code, and phone number to place the order.');
+      if (!firstName || !address) {
+        req.flash('error', 'Please enter your name and address to place the order.');
         return res.redirect('/checkout');
       }
 
       const notesParts = [
-        `Name: ${firstName} ${lastName}`,
-        company ? `Company: ${company}` : '',
+        `Name: ${firstName}`,
         `Address: ${address}`,
-        apartment ? `Unit: ${apartment}` : '',
-        `Postal code: ${postalCode}`,
         `Phone: ${phone}`,
         notesInput ? `Notes: ${notesInput}` : ''
       ].filter(Boolean);
@@ -133,7 +128,7 @@ function OrdersController() {
 
         const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-        OrdersModel.createOrder(user.id, normalizedItems, total, notes, 'pending', (orderErr) => {
+        OrdersModel.createOrder(user.id, normalizedItems, total, notes, 'pending', (orderErr, data = {}) => {
           if (orderErr) {
             console.error('Order creation failed:', orderErr);
             if (orderErr.code === 'INSUFFICIENT_STOCK') {
@@ -145,8 +140,16 @@ function OrdersController() {
           }
 
           req.session.cart = []; // Clear cart
+          UserCartModel.clearCart(user.id, (clearErr) => {
+            if (clearErr) console.error('Failed to clear persisted cart:', clearErr);
+          });
+
           req.flash('success', 'Order placed successfully');
-          return res.redirect('/orders'); // Purchase history
+          const orderId = data.orderId;
+          if (orderId) {
+            return res.redirect(`/orders/${orderId}`); // Order summary
+          }
+          return res.redirect('/orders'); // Purchase history fallback
         });
       });
     },
@@ -160,15 +163,37 @@ function OrdersController() {
       const success = req.flash('success');
       const errors = req.flash('error');
 
-      OrdersModel.getOrdersByUser(user.id, (err, orders) => {
+      OrdersModel.getOrdersByUser(user.id, (err, orders = []) => {
         if (err)
           return res.status(500).render('error', { message: 'Failed to load orders' });
 
-        return res.render('purchaseHistory', {
+        const renderOrders = () => res.render('purchaseHistory', {
           orders,
           user,
           success,
           errors
+        });
+
+        if (!orders.length) return renderOrders();
+
+        let pending = orders.length;
+        orders.forEach((order) => {
+          RefundModel.getRefundsByOrder(order.id, (rErr, refunds = []) => {
+            if (!rErr) {
+              order.refunds = refunds;
+              const lower = refunds.map(r => String(r.status || '').toLowerCase());
+              if (lower.some(s => s === 'approved' || s === 'processed')) {
+                order.refundStatus = 'refunded';
+              } else if (lower.some(s => s === 'pending')) {
+                order.refundStatus = 'refund_pending';
+              } else {
+                order.refundStatus = 'none';
+              }
+            }
+            pending -= 1;
+            if (pending === 0) return renderOrders();
+            return null;
+          });
         });
       });
     },
@@ -187,9 +212,10 @@ function OrdersController() {
 
       const allowAdmin = sessionUser.role === 'admin';
 
-      const renderOrder = (order) => res.render('orderDetails', {
+      const renderOrder = (order, refunds = []) => res.render('orderDetails', {
         order,
-        user: sessionUser
+        user: sessionUser,
+        refunds
       });
 
       OrdersModel.getOrderById(orderId, sessionUser.id, (err, order) => {
@@ -212,13 +238,17 @@ function OrdersController() {
           return res.redirect('/orders');
         }
 
-        return renderOrder(order);
+        return RefundModel.getRefundsByOrder(order.id, (rErr, refunds = []) => {
+          if (rErr) {
+            console.error('Failed to load refunds:', rErr);
+            return renderOrder(order, []);
+          }
+          return renderOrder(order, refunds);
+        });
       });
     },
 
-    // ===============================
-    // ADMIN: UPDATE ORDER STATUS
-    // ===============================
+    // ADMIN: update status/shipping
     updateStatus(req, res) {
       const sessionUser = req.session.user;
       if (!sessionUser || sessionUser.role !== 'admin') {
@@ -226,45 +256,66 @@ function OrdersController() {
         return res.redirect('/orders');
       }
       const orderId = parseInt(req.params.id, 10);
-      const { status } = req.body;
-      if (Number.isNaN(orderId) || !status) {
-        req.flash('error', 'Invalid order or status');
+      const { status, shipping_status } = req.body;
+      if (Number.isNaN(orderId)) {
+        req.flash('error', 'Invalid order');
         return res.redirect('/orders');
       }
 
-      OrdersModel.updateOrderStatus(orderId, status, (err, result) => {
-        if (err || !result.affectedRows) {
-          console.error('Failed to update order status:', err);
+      const tasks = [];
+      if (status) tasks.push((cb) => OrdersModel.updateOrderStatus(orderId, status, cb));
+      if (shipping_status) tasks.push((cb) => OrdersModel.updateShippingStatus(orderId, shipping_status, cb));
+
+      let pending = tasks.length;
+      if (!pending) {
+        req.flash('error', 'No updates provided.');
+        return res.redirect(`/orders/${orderId}`);
+      }
+
+      const done = (err) => {
+        if (err) {
+          console.error('Failed to update order/shipping status:', err);
           req.flash('error', 'Could not update order status.');
-          return res.redirect('/orders');
+          return res.redirect(`/orders/${orderId}`);
         }
-        req.flash('success', `Order #${orderId} marked as ${status}.`);
+        pending -= 1;
+        if (pending === 0) {
+          req.flash('success', 'Order updated.');
+          return res.redirect(`/orders/${orderId}`);
+        }
+      };
+
+      tasks.forEach(t => t(done));
+    },
+
+    // ADMIN: process refund
+    createRefund(req, res) {
+      const sessionUser = req.session.user;
+      if (!sessionUser || sessionUser.role !== 'admin') {
+        req.flash('error', 'Access denied');
+        return res.redirect('/orders');
+      }
+      const orderId = parseInt(req.params.id, 10);
+      const amount = parseFloat(req.body.amount);
+      const reason = (req.body.reason || '').trim();
+
+      if (Number.isNaN(orderId) || Number.isNaN(amount) || amount <= 0) {
+        req.flash('error', 'Invalid refund details.');
+        return res.redirect(`/orders/${orderId}`);
+      }
+
+      RefundModel.createRefund(orderId, amount, reason, (err) => {
+        if (err) {
+          console.error('Failed to create refund:', err);
+          req.flash('error', 'Could not create refund request.');
+          return res.redirect(`/orders/${orderId}`);
+        }
+        req.flash('success', 'Refund recorded.');
         return res.redirect(`/orders/${orderId}`);
       });
     },
 
     // ===============================
-    // ADMIN: LIST ALL ORDERS
-    // ===============================
-    adminList(req, res) {
-      const errors = req.flash('error');
-      const success = req.flash('success');
-
-      OrdersModel.getAllOrders((err, orders = []) => {
-        if (err) {
-          console.error('Failed to load orders for admin:', err);
-          return res.status(500).render('error', { message: 'Failed to load orders' });
-        }
-
-        return res.render('adminOrders', {
-          user: req.session.user,
-          orders,
-          errors,
-          success
-        });
-      });
-    },
-
     // ===============================
     // REORDER ALL ITEMS INTO CART
     // ===============================
@@ -272,7 +323,10 @@ function OrdersController() {
       const user = req.session.user;
       if (!user) return res.redirect('/login');
 
-      OrdersModel.getOrderById(orderId, user.id, (err, order) => {
+      const allowAdmin = user.role === 'admin';
+      const userFilter = allowAdmin ? null : user.id;
+
+      OrdersModel.getOrderById(orderId, userFilter, (err, order) => {
         if (err) {
           console.error('Failed to load order for reorder:', err);
           req.flash('error', 'Unable to reorder right now.');
@@ -337,6 +391,11 @@ function OrdersController() {
           });
 
           req.session.cart = cart;
+          UserCartModel.replaceCart(user.id, cart, (persistErr) => {
+            if (persistErr) {
+              console.error('Failed to persist reordered cart:', persistErr);
+            }
+          });
 
           if (addedCount > 0) {
             req.flash('success', `Added ${addedCount} item(s) from order #${order.id} to your cart.`);

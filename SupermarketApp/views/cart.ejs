@@ -4,7 +4,7 @@
   <div class="d-flex justify-content-between flex-wrap align-items-center gap-2 mb-3">
     <div>
       <h2 class="section-title mb-1">Cart overview</h2>
-      <p class="subtle-text mb-0">Refined list layout and cozy cards -- mirroring the Dribbble concept.</p>
+      <p class="subtle-text mb-0">Cart out soon! While stock last!</p>
     </div>
     <a class="btn btn-secondary" href="/shopping">Continue shopping</a>
   </div>
@@ -32,6 +32,11 @@
 
     <div class="split-layout">
       <div class="d-flex flex-column gap-3">
+        <div class="d-flex justify-content-end">
+          <form action="/cart/clear" method="POST" class="m-0">
+            <button type="submit" class="btn btn-secondary">Clear cart</button>
+          </form>
+        </div>
         <% cart.forEach(item => { %>
           <div class="inventory-card">
             <div class="d-flex gap-3 align-items-center">
@@ -40,7 +45,15 @@
                 <div class="d-flex justify-content-between align-items-start">
                   <div>
                     <h4 class="mb-1"><%= item.productName %></h4>
-                    <p class="subtle-text mb-0">Qty: <strong><%= item.quantity %></strong></p>
+                    <form action="/cart/update/<%= item.productId %>" method="POST" class="d-flex align-items-center gap-2 mt-1 qty-form">
+                      <input type="hidden" name="delta" value="0">
+                      <span class="subtle-text mb-0">Qty:</span>
+                      <div class="qty-control">
+                        <button type="button" data-delta="-9999" class="qty-btn" aria-label="Decrease quantity">-</button>
+                        <span class="qty-value"><%= item.quantity %></span>
+                        <button type="button" data-delta="9999" class="qty-btn" aria-label="Increase quantity">+</button>
+                      </div>
+                    </form>
                   </div>
                   <span class="price-tag">$<%= (item.price * item.quantity).toFixed(2) %></span>
                 </div>
@@ -77,5 +90,17 @@
     </div>
   <% } %>
 </section>
+
+<script>
+  document.querySelectorAll('.qty-form').forEach((form) => {
+    const hiddenDelta = form.querySelector('input[name="delta"]');
+    form.querySelectorAll('.qty-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        hiddenDelta.value = btn.getAttribute('data-delta') || '0';
+        form.submit();
+      });
+    });
+  });
+</script>
 
 <%- include('partials/footer') %>

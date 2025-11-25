@@ -143,8 +143,32 @@ function ProductController() {
           if (req.accepts('html')) return res.status(404).render('error', { message: 'Product not found' });
           return res.status(404).json({ error: 'Product not found' });
         }
-        if (req.accepts('html')) return res.render('product', { product, user: req.session.user });
-        return res.json(product);
+
+        const sendResponse = (relatedProducts = []) => {
+          if (req.accepts('html')) return res.render('product', { product, user: req.session.user, relatedProducts });
+          return res.json({ product, relatedProducts });
+        };
+
+        ProductModel.getAllProducts((allErr, allProducts = []) => {
+          if (allErr) {
+            console.error('Error fetching products for related list:', allErr);
+            return sendResponse([]);
+          }
+
+          const others = allProducts.filter(p => p.id !== product.id);
+          const categoryValue = product.category || null;
+          const related = others
+            .filter(p => {
+              const sameCategory = categoryValue ? matchesCategory(p, categoryValue) : false;
+              const sameOrigin = p.origin && product.origin && p.origin === product.origin;
+              return sameCategory || sameOrigin;
+            })
+            .slice(0, 4);
+
+          const fallback = related.length ? related : others.slice(0, 4);
+
+          return sendResponse(fallback);
+        });
       });
     },
 
@@ -170,6 +194,23 @@ function ProductController() {
         }
         req.flash('success', 'Product added');
         return res.redirect('/inventory');
+      });
+    },
+
+    // Render edit form
+    editProductView(req, res) {
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        req.flash('error', 'Invalid product id');
+        return res.redirect('/inventory');
+      }
+
+      ProductModel.getProductById(id, (err, product) => {
+        if (err || !product) {
+          req.flash('error', 'Product not found');
+          return res.redirect('/inventory');
+        }
+        return res.render('updateProduct', { product, user: req.session.user, errors: req.flash('error'), success: req.flash('success') });
       });
     },
 

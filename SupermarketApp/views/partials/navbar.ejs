@@ -8,19 +8,19 @@
       <% if (currentUser && currentUser.role === 'admin') { %>
         <li><a href="/inventory">Inventory</a></li>
         <li><a href="/addProduct">Add Products</a></li>
-        <li><a href="/admin/orders">Orders</a></li>
+        <li><a href="/shopping">Shop</a></li>
         <li><a href="/admin/users">Users</a></li>
-      <% } else if (currentUser) { %>
-        <li class="nav-dropdown">
-          <a href="/shopping">Shop</a>
-          <% if (navCategories && navCategories.length) { %>
-            <ul class="nav-dropdown-menu">
-              <% navCategories.forEach(cat => { %>
-                <li><a href="/shopping?<%= `category=${encodeURIComponent(cat)}` %>"><%= cat %></a></li>
-              <% }) %>
-            </ul>
-          <% } %>
+        <li>
+          <a href="/admin/refunds">
+            Refunds
+            <% if (typeof pendingRefundCount !== 'undefined' && pendingRefundCount > 0) { %>
+              (<%= pendingRefundCount %>)
+            <% } %>
+          </a>
         </li>
+        <li><a href="/orders">Orders</a></li>
+      <% } else if (currentUser) { %>
+        <li><a href="/shopping">Shop</a></li>
         <li><a href="/orders">Orders</a></li>
       <% } else { %>
         <li><a href="/login">Login</a></li>
@@ -38,6 +38,14 @@
           </span>
         </div>
         <% if (currentUser.role !== 'admin') { %>
+          <a class="btn btn-secondary cart-btn" href="/cart">
+            Cart
+            <% if (typeof cartCount !== 'undefined') { %>
+              <span class="cart-badge"><%= cartCount %></span>
+            <% } %>
+          </a>
+        <% } %>
+        <% if (currentUser.role === 'admin') { %>
           <a class="btn btn-secondary cart-btn" href="/cart">
             Cart
             <% if (typeof cartCount !== 'undefined') { %>

@@ -4,7 +4,7 @@
   <div class="d-flex justify-content-between flex-wrap align-items-center mb-4">
     <div>
       <h2 class="section-title mb-1">Purchase history</h2>
-      <p class="subtle-text mb-0">Timeline cards reminiscent of the concept shot.</p>
+      <p class="subtle-text mb-0">Thank you for purchasing with us! Here your past orders.</p>
     </div>
     <a class="btn btn-secondary" href="/shopping">Shop again</a>
   </div>
@@ -31,13 +31,21 @@
       <% orders.forEach(order => { %>
         <% const placedOn = new Date(order.created_at); %>
         <% const itemCount = order.items ? order.items.length : (order.itemsCount || 0); %>
+        <% const refundStatus = order.refundStatus || 'none'; %>
         <div class="inventory-card">
           <div class="d-flex justify-content-between align-items-start">
             <div>
               <p class="subtle-text mb-1">Order #<%= order.id %></p>
               <h4><%= placedOn.toLocaleString() %></h4>
             </div>
-            <span class="status-pill success">$<%= order.total.toFixed(2) %></span>
+            <div class="d-flex gap-2 align-items-center">
+              <% if (refundStatus === 'refunded') { %>
+                <span class="status-pill danger">Refunded</span>
+              <% } else if (refundStatus === 'refund_pending') { %>
+                <span class="status-pill warning">Refund pending</span>
+              <% } %>
+              <span class="status-pill success">$<%= order.total.toFixed(2) %></span>
+            </div>
           </div>
           <% if (order.items && order.items.length) { %>
             <ul class="order-summary-list mt-3">

@@ -1,6 +1,24 @@
 const db = require('../db');
 
 function OrdersModel() {
+  const ensureOrderSchema = (callback) => {
+    const ensureColumn = (col, ddl, next) => {
+      const checkSql = 'SHOW COLUMNS FROM orders LIKE ?';
+      db.query(checkSql, [col], (err, rows = []) => {
+        if (err) return next(err);
+        if (rows.length) return next(null);
+        db.query(ddl, (alterErr) => next(alterErr || null));
+      });
+    };
+
+    ensureColumn('status', "ALTER TABLE orders ADD COLUMN status VARCHAR(32) DEFAULT 'pending'", (err) => {
+      if (err) return callback(err);
+      ensureColumn('shipping_status', "ALTER TABLE orders ADD COLUMN shipping_status VARCHAR(32) DEFAULT 'processing'", callback);
+    });
+  };
+
+  const ensureStatusColumns = (callback) => ensureOrderSchema(callback);
+
   return {
 
     createOrder(userId, items, total, notes, status = 'pending', callback) {
@@ -9,8 +27,8 @@ function OrdersModel() {
       }
 
       const orderSqlWithNotes = `
-        INSERT INTO orders (user_id, total, notes, status, created_at)
-        VALUES (?, ?, ?, ?, NOW())
+        INSERT INTO orders (user_id, total, notes, status, shipping_status, created_at)
+        VALUES (?, ?, ?, ?, ?, NOW())
       `;
 
       const orderSqlLegacy = `
@@ -18,78 +36,85 @@ function OrdersModel() {
         VALUES (?, ?, NOW())
       `;
 
-      db.beginTransaction((txnErr) => {
-        if (txnErr) return callback(txnErr);
+      const startInsert = () => {
+        db.beginTransaction((txnErr) => {
+          if (txnErr) return callback(txnErr);
 
-        const insertOrder = (useNotes) => {
-          const sql = useNotes ? orderSqlWithNotes : orderSqlLegacy;
-          const params = useNotes ? [userId, total, notes, status] : [userId, total];
+          const insertOrder = (useNotes) => {
+            const sql = useNotes ? orderSqlWithNotes : orderSqlLegacy;
+            const params = useNotes ? [userId, total, notes, status, 'processing'] : [userId, total];
 
-          db.query(sql, params, (err, result) => {
-            if (err) {
-              if (useNotes && err.code === 'ER_BAD_FIELD_ERROR') {
-                return insertOrder(false);
-              }
-              return db.rollback(() => callback(err));
-            }
-
-            const orderId = result.insertId;
-            const values = items.map((i) => [
-              orderId,
-              i.productId,
-              i.price,
-              i.quantity
-            ]);
-
-            const itemsSql = `
-              INSERT INTO order_items (order_id, product_id, price, quantity)
-              VALUES ?
-            `;
-
-            db.query(itemsSql, [values], (itemErr) => {
-              if (itemErr) {
-                return db.rollback(() => callback(itemErr));
+            db.query(sql, params, (err, result) => {
+              if (err) {
+                if (useNotes && err.code === 'ER_BAD_FIELD_ERROR') {
+                  return insertOrder(false);
+                }
+                return db.rollback(() => callback(err));
               }
 
-              const updateStock = (index = 0) => {
-                if (index >= items.length) {
-                  return db.commit((commitErr) => {
-                    if (commitErr) {
-                      return db.rollback(() => callback(commitErr));
-                    }
-                    return callback(null, { orderId });
-                  });
+              const orderId = result.insertId;
+              const values = items.map((i) => [
+                orderId,
+                i.productId,
+                i.price,
+                i.quantity
+              ]);
+
+              const itemsSql = `
+                INSERT INTO order_items (order_id, product_id, price, quantity)
+                VALUES ?
+              `;
+
+              db.query(itemsSql, [values], (itemErr) => {
+                if (itemErr) {
+                  return db.rollback(() => callback(itemErr));
                 }
 
-                const line = items[index];
-                const stockSql = 'UPDATE products SET quantity = quantity - ? WHERE id = ? AND quantity >= ?';
-                db.query(stockSql, [line.quantity, line.productId, line.quantity], (stockErr, updateResult) => {
-                  if (stockErr) {
-                    return db.rollback(() => callback(stockErr));
+                const updateStock = (index = 0) => {
+                  if (index >= items.length) {
+                    return db.commit((commitErr) => {
+                      if (commitErr) {
+                        return db.rollback(() => callback(commitErr));
+                      }
+                      return callback(null, { orderId });
+                    });
                   }
 
-                  if (updateResult.affectedRows === 0) {
-                    const insufficient = new Error('INSUFFICIENT_STOCK');
-                    insufficient.code = 'INSUFFICIENT_STOCK';
-                    return db.rollback(() => callback(insufficient));
-                  }
+                  const line = items[index];
+                  const stockSql = 'UPDATE products SET quantity = quantity - ? WHERE id = ? AND quantity >= ?';
+                  db.query(stockSql, [line.quantity, line.productId, line.quantity], (stockErr, updateResult) => {
+                    if (stockErr) {
+                      return db.rollback(() => callback(stockErr));
+                    }
 
-                  return updateStock(index + 1);
-                });
-              };
+                    if (updateResult.affectedRows === 0) {
+                      const insufficient = new Error('INSUFFICIENT_STOCK');
+                      insufficient.code = 'INSUFFICIENT_STOCK';
+                      return db.rollback(() => callback(insufficient));
+                    }
 
-              return updateStock();
+                    return updateStock(index + 1);
+                  });
+                };
+
+                return updateStock();
+              });
             });
-          });
-        };
+          };
 
-        insertOrder(true);
+          insertOrder(true);
+        });
+      };
+
+      ensureOrderSchema((schemaErr) => {
+        if (schemaErr) return callback(schemaErr);
+        startInsert();
       });
     },
 
     getOrdersByUser(userId, callback) {
       const sqlWithNotes = `
-        SELECT o.id, o.total, o.notes, o.status, o.created_at,
+        SELECT o.id, o.total, o.notes, o.status, o.shipping_status, o.created_at,
                oi.product_id, oi.price, oi.quantity,
                p.productName
         FROM orders o
@@ -100,7 +125,18 @@ function OrdersModel() {
       `;
 
       const sqlLegacy = `
-        SELECT o.id, o.total, o.status, o.created_at,
+        SELECT o.id, o.total, o.created_at,
+               oi.product_id, oi.price, oi.quantity,
+               p.productName
+        FROM orders o
+        JOIN order_items oi ON o.id = oi.order_id
+        JOIN products p ON oi.product_id = p.id
+        WHERE o.user_id = ?
+        ORDER BY o.created_at DESC
+      `;
+
+      const sqlNoNotesNoStatus = `
+        SELECT o.id, o.total, o.created_at,
                oi.product_id, oi.price, oi.quantity,
                p.productName
         FROM orders o
@@ -117,6 +153,31 @@ function OrdersModel() {
             if (useNotes && err.code === 'ER_BAD_FIELD_ERROR') {
               return runQuery(false);
             }
+            if (!useNotes && err.code === 'ER_BAD_FIELD_ERROR') {
+              return db.query(sqlNoNotesNoStatus, [userId], (err2, rows2 = []) => {
+                if (err2) return callback(err2);
+                const ordersFallback = {};
+                rows2.forEach((r) => {
+                  if (!ordersFallback[r.id]) {
+                    ordersFallback[r.id] = {
+                      id: r.id,
+                      total: Number(r.total),
+                      notes: '',
+                      status: 'delivered',
+                      created_at: r.created_at,
+                      items: []
+                    };
+                  }
+                  ordersFallback[r.id].items.push({
+                    product_id: r.product_id,
+                    productName: r.productName,
+                    price: Number(r.price) || 0,
+                    quantity: r.quantity
+                  });
+                });
+                return callback(null, Object.values(ordersFallback));
+              });
+            }
             return callback(err);
           }
 
@@ -129,6 +190,7 @@ function OrdersModel() {
                 total: Number(r.total),
                 notes: useNotes ? (r.notes || '') : '',
                 status: r.status || 'delivered',
+                shipping_status: r.shipping_status || 'processing',
                 created_at: r.created_at,
                 items: []
               };
@@ -154,7 +216,7 @@ function OrdersModel() {
       const params = userId ? [orderId, userId] : [orderId];
 
       const sqlWithNotes = `
-        SELECT o.id, o.total, o.notes, o.status, o.created_at,
+        SELECT o.id, o.total, o.notes, o.status, o.shipping_status, o.created_at,
                oi.product_id, oi.price, oi.quantity,
                p.productName
         FROM orders o
@@ -164,7 +226,17 @@ function OrdersModel() {
       `;
 
       const sqlLegacy = `
-        SELECT o.id, o.total, o.status, o.created_at,
+        SELECT o.id, o.total, o.created_at,
+               oi.product_id, oi.price, oi.quantity,
+               p.productName
+        FROM orders o
+        JOIN order_items oi ON o.id = oi.order_id
+        JOIN products p ON oi.product_id = p.id
+        WHERE o.id = ? ${filterClause}
+      `;
+
+      const sqlNoNotesNoStatus = `
+        SELECT o.id, o.total, o.created_at,
                oi.product_id, oi.price, oi.quantity,
                p.productName
         FROM orders o
@@ -180,6 +252,28 @@ function OrdersModel() {
             if (useNotes && err.code === 'ER_BAD_FIELD_ERROR') {
               return runQuery(false);
             }
+            if (!useNotes && err.code === 'ER_BAD_FIELD_ERROR') {
+              return db.query(sqlNoNotesNoStatus, params, (err2, rows2 = []) => {
+                if (err2 || !rows2.length) return callback(err2 || null, rows2.length ? rows2 : null);
+                const order = {
+                  id: rows2[0].id,
+                  total: Number(rows2[0].total),
+                  notes: '',
+                  status: 'delivered',
+                  created_at: rows2[0].created_at,
+                  items: []
+                };
+                rows2.forEach((r) => {
+                  order.items.push({
+                    product_id: r.product_id,
+                    productName: r.productName,
+                    price: Number(r.price) || 0,
+                    quantity: r.quantity
+                  });
+                });
+                return callback(null, order);
+              });
+            }
             return callback(err);
           }
           if (!rows.length) return callback(null, null);
@@ -189,6 +283,7 @@ function OrdersModel() {
             total: Number(rows[0].total),
             notes: useNotes ? (rows[0].notes || '') : '',
             status: rows[0].status || 'delivered',
+            shipping_status: rows[0].shipping_status || 'processing',
             created_at: rows[0].created_at,
             items: []
           };
@@ -210,89 +305,25 @@ function OrdersModel() {
     },
 
     updateOrderStatus(orderId, status, callback) {
-      const sql = 'UPDATE orders SET status = ? WHERE id = ?';
-      db.query(sql, [status, orderId], (err, result) => {
+      ensureStatusColumns((err) => {
         if (err) return callback(err);
-        callback(null, { affectedRows: result.affectedRows });
-      });
-    },
-
-    getOrderStats(callback) {
-      const sql = `
-        SELECT
-          (SELECT COUNT(*) FROM orders) AS totalOrders,
-          (SELECT COALESCE(SUM(quantity), 0) FROM order_items) AS totalItems
-      `;
-      db.query(sql, (err, rows = []) => {
-        if (err) return callback(err);
-        const row = rows[0] || {};
-        callback(null, {
-          totalOrders: Number(row.totalOrders) || 0,
-          totalItems: Number(row.totalItems) || 0
+        const sql = 'UPDATE orders SET status = ? WHERE id = ?';
+        db.query(sql, [status, orderId], (qErr, result) => {
+          if (qErr) return callback(qErr);
+          callback(null, { affectedRows: result.affectedRows });
         });
       });
     },
 
-    getAllOrders(callback) {
-      const sqlWithStatus = `
-        SELECT
-          o.id,
-          o.user_id,
-          u.username,
-          u.email,
-          o.total,
-          o.status,
-          o.created_at,
-          COUNT(oi.order_id) AS itemCount
-        FROM orders o
-        LEFT JOIN users u ON u.id = o.user_id
-        LEFT JOIN order_items oi ON oi.order_id = o.id
-        GROUP BY o.id
-        ORDER BY o.created_at DESC
-      `;
-
-      const sqlLegacy = `
-        SELECT
-          o.id,
-          o.user_id,
-          u.username,
-          u.email,
-          o.total,
-          o.created_at,
-          COUNT(oi.order_id) AS itemCount
-        FROM orders o
-        LEFT JOIN users u ON u.id = o.user_id
-        LEFT JOIN order_items oi ON oi.order_id = o.id
-        GROUP BY o.id
-        ORDER BY o.created_at DESC
-      `;
-
-      const runQuery = (useStatus) => {
-        const sql = useStatus ? sqlWithStatus : sqlLegacy;
-        db.query(sql, (err, rows = []) => {
-          if (err) {
-            if (useStatus && err.code === 'ER_BAD_FIELD_ERROR') {
-              return runQuery(false);
-            }
-            return callback(err);
-          }
-
-          const orders = rows.map(r => ({
-            id: r.id,
-            user_id: r.user_id,
-            username: r.username || 'Unknown',
-            email: r.email || '',
-            total: Number(r.total) || 0,
-            status: useStatus ? (r.status || 'delivered') : 'delivered',
-            created_at: r.created_at,
-            itemCount: Number(r.itemCount) || 0
-          }));
-
-          callback(null, orders);
+    updateShippingStatus(orderId, shippingStatus, callback) {
+      ensureStatusColumns((err) => {
+        if (err) return callback(err);
+        const sql = 'UPDATE orders SET shipping_status = ? WHERE id = ?';
+        db.query(sql, [shippingStatus, orderId], (qErr, result) => {
+          if (qErr) return callback(qErr);
+          callback(null, { affectedRows: result.affectedRows });
         });
-      };
-
-      runQuery(true);
+      });
     }
 
   };
