@@ -6,53 +6,65 @@
       <h4>Product not found</h4>
       <a class="btn btn-secondary mt-2" href="/shopping">Back to shopping</a>
     </div>
-  <% } else { %>
-    <div class="split-layout align-items-center">
-      <div>
-        <img src="/images/<%= product.image %>" alt="<%= product.productName %>" style="width:100%;border-radius:30px;object-fit:contain;background:#f7f7f7;padding:0.75rem;">
-      </div>
-      <div class="d-flex flex-column gap-3">
-        <div>
-          <h2 class="section-title mb-1"><%= product.productName %></h2>
-        </div>
-        <div class="glass-panel">
-          <div class="summary-row">
-            <span>Price</span>
-            <span class="price-tag">$<%= product.price.toFixed(2) %></span>
-          </div>
-          <div class="summary-row">
-            <span>Available</span>
-            <span><%= product.quantity %> units</span>
-          </div>
-        </div>
-        <% if (user.role === 'admin') { %>
-          <div class="d-flex gap-2">
-            <a class="btn btn-secondary" href="/inventory">Back to inventory</a>
-            <a class="btn btn-primary" href="/updateProduct/<%= product.id %>">Edit product</a>
-          </div>
-        <% } else { %>
-          <div class="d-flex gap-2 align-items-center flex-wrap">
-            <a class="btn btn-secondary" href="/shopping">Back to catalog</a>
-            <form action="/add-to-cart/<%= product.id %>" method="POST" class="d-flex gap-2 align-items-center">
-              <div class="qty-stepper" data-max="<%= product.quantity || 1 %>">
-                <button type="button" class="btn-icon qty-minus" aria-label="Decrease quantity">-</button>
-                <input
-                  type="number"
-                  class="qty-input"
-                  name="quantity"
-                  value="1"
-                  min="1"
-                  max="<%= product.quantity || 1 %>"
-                  inputmode="numeric"
-                />
-                <button type="button" class="btn-icon qty-plus" aria-label="Increase quantity">+</button>
-              </div>
-              <button class="btn btn-primary" type="submit">Add to cart</button>
-            </form>
-          </div>
-        <% } %>
-      </div>
+<% } else { %>
+  <div class="split-layout align-items-center">
+    <div>
+      <img src="/images/<%= product.image %>" alt="<%= product.productName %>" style="width:100%;border-radius:30px;object-fit:contain;background:#f7f7f7;padding:0.75rem;">
     </div>
+    <div class="d-flex flex-column gap-3">
+      <div>
+        <h2 class="section-title mb-1"><%= product.productName %></h2>
+        <% const qty = Number(product.quantity) || 0; %>
+        <p class="subtle-text mb-0 stock-line">
+          Stock: <strong><%= qty %></strong>
+          <% if (qty === 0) { %>
+            <span class="stock-pill danger">Out of stock</span>
+          <% } else if (qty <= 10) { %>
+            <span class="stock-pill warning">Running low</span>
+          <% } else { %>
+            <span class="stock-pill success">In stock</span>
+          <% } %>
+        </p>
+      </div>
+      <div class="glass-panel">
+        <div class="summary-row">
+          <span>Price</span>
+          <span class="price-tag">$<%= product.price.toFixed(2) %></span>
+        </div>
+        <div class="summary-row">
+          <span>Available</span>
+          <span><%= product.quantity %> units</span>
+        </div>
+      </div>
+      <% if (user && user.role === 'admin') { %>
+        <div class="d-flex gap-2">
+          <a class="btn btn-secondary" href="/inventory">Back to inventory</a>
+          <a class="btn btn-primary" href="/updateProduct/<%= product.id %>">Edit product</a>
+        </div>
+      <% } else { %>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <a class="btn btn-secondary" href="/shopping">Back to Shop</a>
+          <form action="/add-to-cart/<%= product.id %>" method="POST" class="d-flex gap-2 align-items-center">
+            <div class="qty-stepper" data-max="<%= product.quantity || 1 %>">
+              <button type="button" class="btn-icon qty-minus" aria-label="Decrease quantity" <%= qty === 0 ? 'disabled' : '' %>>-</button>
+              <input
+                type="number"
+                class="qty-input"
+                name="quantity"
+                value="1"
+                min="1"
+                max="<%= product.quantity || 1 %>"
+                inputmode="numeric"
+                <%= qty === 0 ? 'disabled' : '' %>
+              />
+              <button type="button" class="btn-icon qty-plus" aria-label="Increase quantity" <%= qty === 0 ? 'disabled' : '' %>>+</button>
+            </div>
+            <button class="btn btn-primary" type="submit" <%= qty === 0 ? 'disabled' : '' %>>Add to cart</button>
+          </form>
+        </div>
+      <% } %>
+    </div>
+  </div>
   <% } %>
 </section>
 

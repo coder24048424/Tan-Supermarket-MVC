@@ -185,15 +185,15 @@ function OrdersModel() {
 
           rows.forEach((r) => {
             if (!orders[r.id]) {
-              orders[r.id] = {
-                id: r.id,
-                total: Number(r.total),
-                notes: useNotes ? (r.notes || '') : '',
-                status: r.status || 'delivered',
-                shipping_status: r.shipping_status || 'processing',
-                created_at: r.created_at,
-                items: []
-              };
+                orders[r.id] = {
+                  id: r.id,
+                  total: Number(r.total),
+                  notes: useNotes ? (r.notes || '') : '',
+                  status: r.status || 'pending',
+                  shipping_status: r.shipping_status || 'processing',
+                  created_at: r.created_at,
+                  items: []
+                };
             }
 
             orders[r.id].items.push({
@@ -259,7 +259,7 @@ function OrdersModel() {
                   id: rows2[0].id,
                   total: Number(rows2[0].total),
                   notes: '',
-                  status: 'delivered',
+                  status: 'pending',
                   created_at: rows2[0].created_at,
                   items: []
                 };
@@ -282,7 +282,7 @@ function OrdersModel() {
             id: rows[0].id,
             total: Number(rows[0].total),
             notes: useNotes ? (rows[0].notes || '') : '',
-            status: rows[0].status || 'delivered',
+            status: rows[0].status || 'pending',
             shipping_status: rows[0].shipping_status || 'processing',
             created_at: rows[0].created_at,
             items: []

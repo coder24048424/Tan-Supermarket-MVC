@@ -186,6 +186,8 @@ function OrdersController() {
                 order.refundStatus = 'refunded';
               } else if (lower.some(s => s === 'pending')) {
                 order.refundStatus = 'refund_pending';
+              } else if (lower.some(s => s === 'rejected')) {
+                order.refundStatus = 'refund_rejected';
               } else {
                 order.refundStatus = 'none';
               }
@@ -205,18 +207,28 @@ function OrdersController() {
       const sessionUser = req.session.user;
       const orderId = parseInt(req.params.id, 10);
 
-      if (!sessionUser || Number.isNaN(orderId)) {
+      if (Number.isNaN(orderId)) {
         req.flash('error', 'Invalid order');
         return res.redirect('/orders');
       }
 
-      const allowAdmin = sessionUser.role === 'admin';
+      const allowAdmin = sessionUser && sessionUser.role === 'admin';
 
       const renderOrder = (order, refunds = []) => res.render('orderDetails', {
         order,
         user: sessionUser,
         refunds
       });
+
+      const loadRefunds = (order, done) => {
+        RefundModel.getRefundsByOrder(order.id, (rErr, refunds = []) => {
+          if (rErr) {
+            console.error('Failed to load refunds:', rErr);
+            return done(order, []);
+          }
+          return done(order, refunds);
+        });
+      };
 
       OrdersModel.getOrderById(orderId, sessionUser.id, (err, order) => {
         if (err)
@@ -229,7 +241,7 @@ function OrdersController() {
               req.flash('error', 'Order not found');
               return res.redirect('/orders');
             }
-            return renderOrder(adminOrder);
+            return loadRefunds(adminOrder, renderOrder);
           });
         }
 
@@ -238,13 +250,62 @@ function OrdersController() {
           return res.redirect('/orders');
         }
 
-        return RefundModel.getRefundsByOrder(order.id, (rErr, refunds = []) => {
-          if (rErr) {
-            console.error('Failed to load refunds:', rErr);
-            return renderOrder(order, []);
-          }
-          return renderOrder(order, refunds);
-        });
+        return loadRefunds(order, renderOrder);
+      });
+    },
+
+    // ===============================
+    // INVOICE VIEW
+    // ===============================
+    invoice(req, res) {
+      const sessionUser = req.session.user;
+      const orderId = parseInt(req.params.id, 10);
+
+      if (!sessionUser || Number.isNaN(orderId)) {
+        req.flash('error', 'Invalid order');
+        return res.redirect('/orders');
+      }
+
+      const allowAdmin = sessionUser.role === 'admin';
+
+      const renderInvoice = (order, refunds = []) => res.render('invoice', {
+        order,
+        refunds,
+        user: sessionUser || null
+      });
+
+      const userFilterId = sessionUser ? sessionUser.id : null;
+
+      OrdersModel.getOrderById(orderId, userFilterId, (err, order) => {
+        if (err)
+          return res.status(500).render('error', { message: 'Failed to load order' });
+
+        const handleOrder = (foundOrder) => {
+          return RefundModel.getRefundsByOrder(foundOrder.id, (rErr, refunds = []) => {
+            if (rErr) {
+              console.error('Failed to load refunds for invoice:', rErr);
+              return renderInvoice(foundOrder, []);
+            }
+            return renderInvoice(foundOrder, refunds);
+          });
+        };
+
+        if (!order && allowAdmin) {
+          return OrdersModel.getOrderById(orderId, null, (err2, adminOrder) => {
+            if (err2 || !adminOrder) {
+              req.flash('error', 'Order not found');
+              return res.redirect('/orders');
+            }
+            return handleOrder(adminOrder);
+          });
+        }
+
+        if (!order) {
+          req.flash('error', 'Order not found');
+          return res.redirect('/orders');
+        }
+
+        return handleOrder(order);
       });
     },
 

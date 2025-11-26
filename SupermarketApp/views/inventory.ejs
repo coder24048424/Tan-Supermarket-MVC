@@ -44,31 +44,28 @@
   <% } %>
 
   <form class="catalog-toolbar mt-4" action="/inventory" method="GET">
-    <div class="search-field">
-      <input type="text" name="q" placeholder="Search by product name" value="<%= filters.search %>">
-    </div>
-    <div class="toolbar-selects">
-      <select name="category">
-        <% filterOptions.category.forEach(option => { %>
-          <option value="<%= option.value %>" <%= (filters.category || '') === option.value ? 'selected' : '' %>><%= option.label %></option>
-        <% }) %>
-      </select>
-      <select name="stock">
-        <% filterOptions.stock.forEach(option => { %>
-          <option value="<%= option.value %>" <%= filters.stock === option.value ? 'selected' : '' %>><%= option.label %></option>
-        <% }) %>
-      </select>
-      <select name="sort">
-        <% filterOptions.sort.forEach(option => { %>
-          <option value="<%= option.value %>" <%= filters.sort === option.value ? 'selected' : '' %>><%= option.label %></option>
-        <% }) %>
-      </select>
-    </div>
-    <div class="toolbar-actions">
-      <button type="submit" class="btn btn-primary">Filter</button>
-      <% if (filters.hasActive) { %>
-        <a class="btn btn-link" href="/inventory">Reset</a>
-      <% } %>
+    <div class="catalog-toolbar-inner">
+      <div class="search-field flex-fill">
+        <input type="text" name="q" placeholder="Search by product name" value="<%= filters.search %>">
+      </div>
+      <div class="toolbar-selects">
+        <select name="stock">
+          <% filterOptions.stock.forEach(option => { %>
+            <option value="<%= option.value %>" <%= filters.stock === option.value ? 'selected' : '' %>><%= option.label %></option>
+          <% }) %>
+        </select>
+        <select name="sort">
+          <% filterOptions.sort.forEach(option => { %>
+            <option value="<%= option.value %>" <%= filters.sort === option.value ? 'selected' : '' %>><%= option.label %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="toolbar-actions ms-auto">
+        <button type="submit" class="btn btn-primary">Apply</button>
+        <% if (filters.hasActive) { %>
+          <a class="btn btn-link" href="/inventory">Reset</a>
+        <% } %>
+      </div>
     </div>
   </form>
 
@@ -85,7 +82,6 @@
         <div class="inventory-card">
           <div class="d-flex justify-content-between align-items-start">
             <div>
-              <p class="subtle-text mb-1">#<%= product.id %></p>
               <h4><%= product.productName %></h4>
             </div>
             <span class="chip <%= stockClass %>"><%= product.quantity %> in stock</span>

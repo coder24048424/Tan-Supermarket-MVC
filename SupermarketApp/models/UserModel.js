@@ -65,6 +65,19 @@ function StudentModel() {
         if (err) return callback(err);
         callback(null, { affectedRows: result.affectedRows });
       });
+    },
+
+    findByFields(username, email, contact, callback) {
+      const sql = `
+        SELECT id, username, email, contact
+        FROM users
+        WHERE username = ? OR email = ? OR contact = ?
+        LIMIT 1
+      `;
+      db.query(sql, [username, email, contact], (err, rows = []) => {
+        if (err) return callback(err);
+        callback(null, rows);
+      });
     }
   };
 }

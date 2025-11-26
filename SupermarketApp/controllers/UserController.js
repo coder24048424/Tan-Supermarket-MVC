@@ -183,6 +183,8 @@ function UserController() {
 
           if (!orders.length) return render();
 
+          orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
           let pending = orders.length;
           orders.forEach((order) => {
             RefundModel.getRefundsByOrder(order.id, (rErr, refunds = []) => {
@@ -193,6 +195,8 @@ function UserController() {
                   order.refundStatus = 'refunded';
                 } else if (statuses.some(s => s === 'pending')) {
                   order.refundStatus = 'refund_pending';
+                } else if (statuses.some(s => s === 'rejected')) {
+                  order.refundStatus = 'refund_rejected';
                 } else {
                   order.refundStatus = 'none';
                 }
@@ -223,15 +227,35 @@ function UserController() {
         return res.redirect('/register');
       }
 
-      UserModel.addStudent(userData, (err) => {
-        if (err) {
-          console.error('Error creating user:', err);
+      UserModel.findByFields(userData.username, userData.email, userData.contact, (dupErr, existing = []) => {
+        if (dupErr) {
+          console.error('Error checking duplicates:', dupErr);
           req.flash('error', 'Failed to create user');
           req.flash('formData', req.body);
           return res.redirect('/register');
         }
-        req.flash('success', 'Registration successful. Please log in.');
-        return res.redirect('/login');
+
+        if (existing.length) {
+          req.flash('error', 'An account with that username, email, or contact already exists.');
+          req.flash('formData', req.body);
+          return res.redirect('/register');
+        }
+
+        UserModel.addStudent(userData, (err) => {
+          if (err) {
+            console.error('Error creating user:', err);
+            req.flash('error', 'Failed to create user');
+            req.flash('formData', req.body);
+            return res.redirect('/register');
+          }
+          // Auto-login the new user
+          req.session.user = {
+            id: null, // will be refreshed on next fetch
+            ...userData
+          };
+          req.flash('success', 'Registration successful! You are now logged in.');
+          return res.redirect('/shopping');
+        });
       });
     },
 

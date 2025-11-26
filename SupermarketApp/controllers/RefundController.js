@@ -13,12 +13,16 @@ function RefundController() {
       }
 
       const orderId = parseInt(req.params.id, 10);
-      const amount = parseFloat(req.body.amount);
       const reason = (req.body.reason || '').trim();
 
-      if (Number.isNaN(orderId) || Number.isNaN(amount) || amount <= 0) {
+      if (Number.isNaN(orderId)) {
         req.flash('error', 'Invalid refund details.');
         return res.redirect(`/orders/${orderId || ''}`.replace(/\/$/, ''));
+      }
+
+      if (!reason) {
+        req.flash('error', 'Please provide a reason for your refund request.');
+        return res.redirect(`/orders/${orderId}`);
       }
 
       // Validate the order belongs to the user
@@ -26,6 +30,12 @@ function RefundController() {
         if (orderErr || !order) {
           req.flash('error', 'Order not found.');
           return res.redirect('/orders');
+        }
+
+        const amount = Number(order.total) || 0;
+        if (amount <= 0) {
+          req.flash('error', 'Invalid refund amount for this order.');
+          return res.redirect(`/orders/${orderId}`);
         }
 
         return RefundModel.getRefundsByOrder(orderId, (rErr, existing = []) => {

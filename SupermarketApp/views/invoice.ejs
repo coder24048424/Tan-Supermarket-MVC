@@ -1,0 +1,79 @@
+<%- include('partials/head', { pageTitle: 'Invoice', bodyClass: 'page-invoice' }) %>
+
+<section class="glass-panel invoice">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Invoice</h2>
+      <p class="subtle-text mb-0">Order #<%= order.id %></p>
+      <p class="subtle-text mb-0">Date: <%= order.created_at.toLocaleString() %></p>
+    </div>
+    <div class="text-end">
+      <p class="mb-0"><strong>Tan's Supermarket</strong></p>
+      <% if (user && user.username) { %>
+        <p class="mb-0 subtle-text">Issued to: <%= user.username %></p>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-3">
+    <a class="btn btn-secondary" href="javascript:history.back()">Back</a>
+    <button class="btn btn-primary" type="button" onclick="window.print()">Print</button>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-row">
+      <span>Total</span>
+      <span class="summary-total">$<%= order.total.toFixed(2) %></span>
+    </div>
+    <div class="summary-row">
+      <span>Status</span>
+      <span><%= (order.status || 'delivered').toUpperCase() %></span>
+    </div>
+    <div class="summary-row">
+      <span>Items</span>
+      <span><%= order.items.length %></span>
+    </div>
+    <% if (order.notes) { %>
+      <div class="summary-row">
+        <span>Notes</span>
+        <span><%= order.notes %></span>
+      </div>
+    <% } %>
+    <% if (refunds && refunds.length) { %>
+      <div class="summary-row">
+        <span>Refunds</span>
+        <span>
+          <% refunds.forEach(r => { %>
+            <div>
+              <strong>#<%= r.id %></strong> - $<%= Number(r.amount || 0).toFixed(2) %> - <%= (r.status || '').toUpperCase() %>
+              <% if (r.reason) { %><div class="subtle-text">Reason: <%= r.reason %></div><% } %>
+            </div>
+          <% }) %>
+        </span>
+      </div>
+    <% } %>
+  </div>
+
+  <table class="table-modern mt-3">
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>Price</th>
+        <th>Qty</th>
+        <th>Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% order.items.forEach(item => { %>
+        <tr>
+          <td><%= item.productName %></td>
+          <td>$<%= item.price.toFixed(2) %></td>
+          <td><%= item.quantity %></td>
+          <td>$<%= (item.price * item.quantity).toFixed(2) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</section>
+
+<%- include('partials/footer') %>

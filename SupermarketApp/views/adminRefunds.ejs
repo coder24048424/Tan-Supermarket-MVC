@@ -52,7 +52,7 @@
               <td>
                 <form action="/admin/refunds/<%= r.id %>/status" method="POST" class="d-flex gap-2 align-items-center m-0">
                   <select name="status" class="form-select form-select-sm">
-                    <% ['pending','approved','processed','rejected'].forEach(opt => { %>
+                    <% ['pending','approved','rejected'].forEach(opt => { %>
                       <option value="<%= opt %>" <%= (r.status || '').toLowerCase() === opt ? 'selected' : '' %>><%= opt %></option>
                     <% }) %>
                   </select>

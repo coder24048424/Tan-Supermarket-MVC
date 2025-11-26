@@ -7,15 +7,23 @@
       <p class="subtle-text mb-0">Placed on <%= order.created_at.toLocaleString() %></p>
     </div>
     <div class="d-flex gap-2">
-      <form action="/orders/<%= order.id %>/reorder" method="POST" class="m-0">
-        <button type="submit" class="btn btn-primary">Order all again</button>
-      </form>
-      <a class="btn btn-secondary" href="/orders">Back to orders</a>
+      <% if (!user || user.role !== 'admin') { %>
+        <form action="/orders/<%= order.id %>/reorder" method="POST" class="m-0">
+          <button type="submit" class="btn btn-primary">Order all again</button>
+        </form>
+        <a class="btn btn-secondary" href="/orders">Back to orders</a>
+      <% } else { %>
+        <span class="btn btn-secondary disabled" aria-disabled="true">Back to orders</span>
+      <% } %>
     </div>
   </div>
 
   <div class="split-layout">
     <div class="summary-card">
+      <% const hasRefundApproved = Array.isArray(refunds) && refunds.some(r => {
+        const s = String(r.status || '').toLowerCase();
+        return s === 'approved' || s === 'processed';
+      }); %>
       <h4>Total Paid</h4>
       <p class="summary-total">$<%= order.total.toFixed(2) %></p>
       <div class="summary-row">
@@ -24,6 +32,12 @@
         <% const statusClass = status === 'pending' ? 'warning' : 'success'; %>
         <span class="status-pill <%= statusClass %>"><%= status === 'pending' ? 'Pending' : 'Delivered' %></span>
       </div>
+      <% if (hasRefundApproved) { %>
+        <div class="summary-row">
+          <span>Refund</span>
+          <span class="status-pill danger">Refunded</span>
+        </div>
+      <% } %>
       <% if (order.shipping_status) { %>
         <div class="summary-row">
           <span>Shipping</span>
@@ -34,6 +48,22 @@
         <span>Items</span>
         <span><%= order.items.length %></span>
       </div>
+      <% if (user && user.role === 'admin') { %>
+        <form action="/orders/<%= order.id %>/status" method="POST" class="mt-3 d-grid gap-2">
+          <label class="form-label" for="status">Order status</label>
+          <select class="form-select" id="status" name="status">
+            <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
+            <option value="delivered" <%= status === 'delivered' ? 'selected' : '' %>>Delivered</option>
+          </select>
+          <label class="form-label" for="shipping_status">Shipping status</label>
+          <select class="form-select" id="shipping_status" name="shipping_status">
+            <option value="processing" <%= (order.shipping_status || '').toLowerCase() === 'processing' ? 'selected' : '' %>>Processing</option>
+            <option value="shipped" <%= (order.shipping_status || '').toLowerCase() === 'shipped' ? 'selected' : '' %>>Shipped</option>
+            <option value="delivered" <%= (order.shipping_status || '').toLowerCase() === 'delivered' ? 'selected' : '' %>>Delivered</option>
+          </select>
+          <button type="submit" class="btn btn-primary">Update status</button>
+        </form>
+      <% } %>
       <% if (order.notes) { %>
         <% const noteLines = (order.notes || '').split(/\n/).filter(Boolean); %>
         <div class="note-card mt-3 text-start">
@@ -46,20 +76,12 @@
         </div>
       <% } %>
 
-      <% /* Admin manual refund */ %>
-      <% if (user && user.role === 'admin') { %>
-        <form action="/orders/<%= order.id %>/refund" method="POST" class="mt-3 d-grid gap-2">
-          <label class="form-label" for="refundAmount">Refund amount</label>
-          <input type="number" step="0.01" min="0" class="form-control" id="refundAmount" name="amount" placeholder="e.g., 5.00" required>
-          <textarea class="form-control" name="reason" rows="2" placeholder="Reason (optional)"></textarea>
-          <button type="submit" class="btn btn-primary">Create refund</button>
-        </form>
-      <% } else if (user) { %>
+      <% /* Admin manual refund removed */ %>
+      <% if (user && user.role !== 'admin') { %>
         <% const hasPending = Array.isArray(refunds) && refunds.some(r => (r.status || '').toLowerCase() === 'pending'); %>
         <form action="/orders/<%= order.id %>/refund-request" method="POST" class="mt-3 d-grid gap-2">
-          <label class="form-label" for="refundAmountUser">Request a refund</label>
-          <input type="number" step="0.01" min="0" class="form-control" id="refundAmountUser" name="amount" placeholder="e.g., 5.00" required <%= hasPending ? 'disabled' : '' %>>
-          <textarea class="form-control" name="reason" rows="2" placeholder="Reason (optional)" <%= hasPending ? 'disabled' : '' %>></textarea>
+          <label class="form-label" for="refundReasonUser">Request a refund (full order amount: $<%= order.total.toFixed(2) %>)</label>
+          <textarea class="form-control" id="refundReasonUser" name="reason" rows="2" placeholder="Reason (required)" <%= hasPending ? 'disabled' : '' %> required></textarea>
           <button type="submit" class="btn btn-primary" <%= hasPending ? 'disabled' : '' %>>
             <%= hasPending ? 'Pending refund request' : 'Submit refund request' %>
           </button>
@@ -68,13 +90,22 @@
           <% } %>
         </form>
       <% } %>
+      <% if (user) { %>
+        <a class="btn btn-secondary w-100 mt-2" href="/orders/<%= order.id %>/invoice">View invoice</a>
+      <% } %>
 
       <% if (typeof refunds !== 'undefined' && refunds.length) { %>
         <div class="mt-3">
           <strong>Refunds</strong>
           <ul class="mt-2">
             <% refunds.forEach(r => { %>
-              <li>Refund #<%= r.id %> - $<%= Number(r.amount || 0).toFixed(2) %> - <%= (r.status || '').toUpperCase() %> - <%= r.reason || 'No reason provided' %></li>
+              <% const rs = (r.status || '').toLowerCase(); %>
+              <% const statusClass = rs === 'pending' ? 'warning' : (rs === 'rejected' ? 'danger' : 'success'); %>
+              <li class="d-flex align-items-center gap-2">
+                <span>Refund #<%= r.id %> - $<%= Number(r.amount || 0).toFixed(2) %></span>
+                <span class="status-pill <%= statusClass %>"><%= (r.status || '').toUpperCase() %></span>
+                <span><%= r.reason || 'No reason provided' %></span>
+              </li>
             <% }) %>
           </ul>
         </div>
@@ -101,10 +132,12 @@
               <td><%= item.quantity %></td>
               <td>$<%= (item.price * item.quantity).toFixed(2) %></td>
               <td>
-                <form action="/add-to-cart/<%= item.product_id %>" method="POST" class="m-0">
-                  <input type="hidden" name="quantity" value="<%= item.quantity %>">
-                  <button type="submit" class="btn btn-link">Order again</button>
-                </form>
+                <% if (!user || user.role !== 'admin') { %>
+                  <form action="/add-to-cart/<%= item.product_id %>" method="POST" class="m-0">
+                    <input type="hidden" name="quantity" value="<%= item.quantity %>">
+                    <button type="submit" class="btn btn-link">Order again</button>
+                  </form>
+                <% } %>
               </td>
             </tr>
           <% }) %>

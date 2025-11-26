@@ -1,4 +1,4 @@
-<%- include('partials/head', { pageTitle: "Create account • Tan's Supermarket", bodyClass: 'page-auth' }) %>
+<%- include('partials/head', { pageTitle: "Create account | Tan's Supermarket", bodyClass: 'page-auth' }) %>
 
 <section class="auth-layout glass-panel">
   <div class="auth-hero">
@@ -9,6 +9,13 @@
   <% if (messages && messages.length) { %>
     <div class="toast error">
       <% messages.forEach(message => { %>
+        <div><%= message %></div>
+      <% }) %>
+    </div>
+  <% } %>
+  <% if (successMessages && successMessages.length) { %>
+    <div class="toast success">
+      <% successMessages.forEach(message => { %>
         <div><%= message %></div>
       <% }) %>
     </div>
@@ -43,7 +50,7 @@
     </div>
     <div>
       <label class="form-label" for="contact">Contact Number</label>
-      <input type="text" id="contact" name="contact" class="form-control" placeholder="+65 8123 4567" required value="<%= formData && formData.contact ? formData.contact : '' %>">
+      <input type="text" id="contact" name="contact" class="form-control" placeholder="81234567" required value="<%= formData && formData.contact ? formData.contact : '' %>">
     </div>
   <button type="submit" class="btn btn-primary">Create account</button>
   <p class="subtle-text text-center mb-0">Already have access? <a href="/login">Sign in</a></p>

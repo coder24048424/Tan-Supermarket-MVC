@@ -24,7 +24,7 @@
     <div class="empty-state">
       <h4>Your cart is empty</h4>
       <p>Discover fresh picks and artisan treats.</p>
-      <a class="btn btn-primary mt-2" href="/shopping">Browse catalog</a>
+      <a class="btn btn-primary mt-2" href="/shopping">Browse Shop</a>
     </div>
   <% } else { %>
     <% let total = 0; %>
@@ -40,7 +40,7 @@
         <% cart.forEach(item => { %>
           <div class="inventory-card">
             <div class="d-flex gap-3 align-items-center">
-              <img src="/images/<%= item.image %>" alt="<%= item.productName %>" style="width:90px;height:90px;object-fit:cover;border-radius:20px;">
+              <img src="/images/<%= item.image %>" alt="<%= item.productName %>" style="width:140px;height:140px;object-fit:contain;border-radius:20px;background:#f7f7f7;padding:0.5rem;">
               <div class="flex-grow-1">
                 <div class="d-flex justify-content-between align-items-start">
                   <div>
@@ -49,9 +49,9 @@
                       <input type="hidden" name="delta" value="0">
                       <span class="subtle-text mb-0">Qty:</span>
                       <div class="qty-control">
-                        <button type="button" data-delta="-9999" class="qty-btn" aria-label="Decrease quantity">-</button>
+                        <button type="button" data-delta="-1" class="qty-btn" aria-label="Decrease quantity">-</button>
                         <span class="qty-value"><%= item.quantity %></span>
-                        <button type="button" data-delta="9999" class="qty-btn" aria-label="Increase quantity">+</button>
+                        <button type="button" data-delta="1" class="qty-btn" aria-label="Increase quantity">+</button>
                       </div>
                     </form>
                   </div>

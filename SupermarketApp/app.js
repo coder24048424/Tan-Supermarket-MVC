@@ -88,6 +88,14 @@ const checkAdmin = (req, res, next) => {
     res.redirect('/shopping');
 };
 
+const checkCustomer = (req, res, next) => {
+    if (req.session.user && req.session.user.role === 'admin') {
+        req.flash('error', 'Admins cannot add items or checkout. Switch to a user account to shop.');
+        return res.redirect('/inventory');
+    }
+    return next();
+};
+
 const validateRegistration = (req, res, next) => {
     const { username, email, password, confirmPassword, address, contact } = req.body;
 
@@ -103,9 +111,9 @@ const validateRegistration = (req, res, next) => {
         return res.redirect('/register');
     }
 
-    const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
-    if (!strongPassword.test(password)) {
-        req.flash('error', 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
+    const phoneDigits = String(contact || '').replace(/\D/g, '');
+    if (phoneDigits.length < 8) {
+        req.flash('error', 'Contact number must have at least 8 digits.');
         req.flash('formData', req.body);
         return res.redirect('/register');
     }
@@ -153,7 +161,11 @@ app.get('/', (req, res) => {
 // AUTH
 // ========================
 app.get('/register', (req, res) => {
-    res.render('register', { messages: req.flash('error'), formData: req.flash('formData')[0] });
+    res.render('register', {
+        messages: req.flash('error'),
+        successMessages: req.flash('success'),
+        formData: req.flash('formData')[0]
+    });
 });
 
 app.post('/register', validateRegistration, (req, res) =>
@@ -184,21 +196,70 @@ app.post('/login', (req, res) => {
             return res.redirect('/login');
         }
 
-        req.session.user = match;
-        // Keep cart for the same user across logins; clear it if a different user logs in
-        const previousOwnerId = req.session.lastCartUserId;
-        if (previousOwnerId && previousOwnerId !== match.id) {
-            req.session.cart = [];
-        }
-        req.session.lastCartUserId = match.id;
         req.flash('success', 'Login successful!');
 
-        return UserCartModel.getCartForUser(match.id, (cartErr, cart = []) => {
-            if (!cartErr) {
-                req.session.cart = cart;
+        const guestCart = Array.isArray(req.session.cart) ? [...req.session.cart] : [];
+
+        return UserCartModel.getCartForUser(match.id, (cartErr, persistedCart = []) => {
+            let mergedCart = persistedCart;
+            if (!cartErr && guestCart.length) {
+                const map = new Map();
+                persistedCart.forEach(item => {
+                    map.set(item.productId, { ...item });
+                });
+                guestCart.forEach(item => {
+                    const existing = map.get(item.productId);
+                    if (existing) {
+                        existing.quantity += item.quantity;
+                    } else {
+                        map.set(item.productId, { ...item });
+                    }
+                });
+                mergedCart = Array.from(map.values());
+
+                const ids = mergedCart.map(i => i.productId);
+                ProductModel.getProductsByIds(ids, (prodErr, products = []) => {
+                    if (prodErr) {
+                        console.error('Failed to cap merged cart by stock:', prodErr);
+                        return finalizeMerge(mergedCart);
+                    }
+
+                    const catalog = new Map(products.map(p => [p.id, p]));
+                    let adjusted = false;
+                    mergedCart = mergedCart.map(item => {
+                        const product = catalog.get(item.productId);
+                        const available = product ? Number(product.quantity) || 0 : 0;
+                        if (available <= 0) {
+                            adjusted = true;
+                            return null;
+                        }
+                        const cappedQty = Math.min(item.quantity, available);
+                        if (cappedQty !== item.quantity) adjusted = true;
+                        return { ...item, quantity: cappedQty };
+                    }).filter(Boolean);
+
+                    UserCartModel.replaceCart(match.id, mergedCart, (persistErr) => {
+                        if (persistErr) {
+                            console.error('Failed to merge guest cart:', persistErr);
+                        }
+                        if (adjusted) {
+                            req.flash('error', 'Cart quantities were adjusted to match current stock.');
+                        }
+                        return finalizeMerge(mergedCart);
+                    });
+                });
+            } else {
+                return finalizeMerge(mergedCart);
             }
-            if (match.role === 'admin') return res.redirect('/inventory');
-            return res.redirect('/shopping');
+
+            function finalizeMerge(cartData) {
+                req.session.user = match;
+                req.session.cart = cartData;
+                req.session.lastCartUserId = match.id;
+
+                if (match.role === 'admin') return res.redirect('/inventory');
+                return res.redirect('/shopping');
+            }
         });
     });
 });
@@ -206,9 +267,9 @@ app.post('/login', (req, res) => {
 // Logout
 app.get('/logout', (req, res) => {
     if (req.session) {
-        req.session.lastCartUserId = req.session.user ? req.session.user.id : req.session.lastCartUserId;
-        // Keep the cart in session so it can be restored on the next login by the same user
+        req.session.cart = [];
         req.session.user = null;
+        req.session.lastCartUserId = null;
     }
     res.redirect('/');
 });
@@ -216,7 +277,7 @@ app.get('/logout', (req, res) => {
 // ========================
 // SHOPPING
 // ========================
-app.get('/shopping', checkAuthenticated, (req, res) =>
+app.get('/shopping', (req, res) =>
     ProductController.listProducts(req, res)
 );
 
@@ -224,13 +285,24 @@ app.get('/shopping', checkAuthenticated, (req, res) =>
 // CART SYSTEM
 // ========================
 
-// Add to cart
-app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => {
+// Add to cart (guests allowed; admins blocked)
+app.post('/add-to-cart/:id', (req, res, next) => checkCustomer(req, res, next), (req, res) => {
     const productId = parseInt(req.params.id, 10);
     const quantity = parseInt(req.body.quantity, 10) || 1;
 
-    UserCartModel.getCartForUser(req.session.user.id, (cartErr, persistedCart = []) => {
-        if (!cartErr) req.session.cart = persistedCart;
+    const sessionUser = req.session.user;
+
+    const ensureSessionCart = (cb) => {
+        if (sessionUser && sessionUser.role !== 'admin') {
+            return UserCartModel.getCartForUser(sessionUser.id, (cartErr, persistedCart = []) => {
+                if (!cartErr) req.session.cart = persistedCart;
+                return cb();
+            });
+        }
+        return cb();
+    };
+
+    ensureSessionCart(() => {
         const wasEmpty = !req.session.cart || req.session.cart.length === 0;
 
         ProductModel.getProductById(productId, (err, product) => {
@@ -271,13 +343,22 @@ app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => {
                 });
             }
 
-            return UserCartModel.setItemQuantity(req.session.user.id, product.id, nextQuantity, (persistErr) => {
+            const destination = '/cart';
+            if (!sessionUser || sessionUser.role === 'admin') {
+                if (capped) {
+                    req.flash('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
+                } else {
+                    req.flash('success', `${product.productName} added to your cart.`);
+                }
+                return res.redirect(destination);
+            }
+
+            return UserCartModel.setItemQuantity(sessionUser.id, product.id, nextQuantity, (persistErr) => {
                 if (persistErr) {
                     console.error('Failed to persist cart item:', persistErr);
                     req.flash('error', 'Unable to update your cart right now.');
                     return res.redirect('/shopping');
                 }
-                const destination = '/cart';
                 if (capped) {
                     req.flash('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
                 } else {
@@ -290,7 +371,7 @@ app.post('/add-to-cart/:id', checkAuthenticated, (req, res) => {
 });
 
 // Cart page
-app.get('/cart', checkAuthenticated, (req, res) => {
+app.get('/cart', (req, res) => {
     res.render('cart', {
         cart: req.session.cart || [],
         user: req.session.user,
@@ -300,40 +381,52 @@ app.get('/cart', checkAuthenticated, (req, res) => {
 });
 
 // Remove from cart
-app.get('/remove-from-cart/:id', checkAuthenticated, (req, res) => {
+app.get('/remove-from-cart/:id', (req, res) => {
     const productId = parseInt(req.params.id, 10);
 
     if (!req.session.cart) req.session.cart = [];
 
     req.session.cart = req.session.cart.filter(item => item.productId !== productId);
-    UserCartModel.removeItem(req.session.user.id, productId, (err) => {
-        if (err) {
-            console.error('Failed to remove cart item:', err);
-            req.flash('error', 'Unable to remove item right now.');
+    const user = req.session.user;
+    if (user && user.role !== 'admin') {
+        UserCartModel.removeItem(user.id, productId, (err) => {
+            if (err) {
+                console.error('Failed to remove cart item:', err);
+                req.flash('error', 'Unable to remove item right now.');
+                return res.redirect('/cart');
+            }
+            req.flash('success', 'Item removed.');
             return res.redirect('/cart');
-        }
+        });
+    } else {
         req.flash('success', 'Item removed.');
         return res.redirect('/cart');
-    });
+    }
 });
 
 // Clear entire cart
-app.post('/cart/clear', checkAuthenticated, (req, res) => {
+app.post('/cart/clear', (req, res) => {
     if (!req.session.cart) req.session.cart = [];
     req.session.cart = [];
-    UserCartModel.clearCart(req.session.user.id, (err) => {
-        if (err) {
-            console.error('Failed to clear cart:', err);
-            req.flash('error', 'Unable to clear cart right now.');
+    const user = req.session.user;
+    if (user && user.role !== 'admin') {
+        UserCartModel.clearCart(user.id, (err) => {
+            if (err) {
+                console.error('Failed to clear cart:', err);
+                req.flash('error', 'Unable to clear cart right now.');
+                return res.redirect('/cart');
+            }
+            req.flash('success', 'Cart cleared.');
             return res.redirect('/cart');
-        }
+        });
+    } else {
         req.flash('success', 'Cart cleared.');
         return res.redirect('/cart');
-    });
+    }
 });
 
 // Update quantity in cart
-app.post('/cart/update/:id', checkAuthenticated, (req, res) => {
+app.post('/cart/update/:id', (req, res) => {
     const productId = parseInt(req.params.id, 10);
     const quantity = parseInt(req.body.quantity, 10);
     const delta = parseInt(req.body.delta, 10);
@@ -372,10 +465,16 @@ app.post('/cart/update/:id', checkAuthenticated, (req, res) => {
         const applyUpdate = (cb) => {
             if (nextQuantity === 0) {
                 req.session.cart = req.session.cart.filter(i => i.productId !== productId);
-                return UserCartModel.removeItem(req.session.user.id, productId, cb);
+                if (req.session.user && req.session.user.role !== 'admin') {
+                    return UserCartModel.removeItem(req.session.user.id, productId, cb);
+                }
+                return cb();
             }
             existing.quantity = nextQuantity;
-            return UserCartModel.setItemQuantity(req.session.user.id, productId, nextQuantity, cb);
+            if (req.session.user && req.session.user.role !== 'admin') {
+                return UserCartModel.setItemQuantity(req.session.user.id, productId, nextQuantity, cb);
+            }
+            return cb();
         };
 
         applyUpdate((persistErr) => {
@@ -440,8 +539,8 @@ app.get('/admin/users/:id/orders', checkAuthenticated, checkAdmin, (req, res) =>
     UserController.adminUserOrders(req, res)
 );
 
-// Product detail
-app.get('/product/:id', checkAuthenticated, (req, res) =>
+// Product detail (public)
+app.get('/product/:id', (req, res) =>
     ProductController.getProductById(req, res)
 );
 
@@ -450,12 +549,12 @@ app.get('/product/:id', checkAuthenticated, (req, res) =>
 // ========================
 
 // Show checkout page
-app.get('/checkout', checkAuthenticated, (req, res) =>
+app.get('/checkout', checkAuthenticated, checkCustomer, (req, res) =>
     OrdersController.checkoutPage(req, res)
 );
 
 // Place order
-app.post('/checkout', checkAuthenticated, (req, res) =>
+app.post('/checkout', checkAuthenticated, checkCustomer, (req, res) =>
     OrdersController.placeOrder(req, res)
 );
 
@@ -467,6 +566,10 @@ app.get('/orders', checkAuthenticated, (req, res) =>
 // Order details
 app.get('/orders/:id', checkAuthenticated, (req, res) =>
     OrdersController.getOrderById(req, res)
+);
+// Order invoice (HTML)
+app.get('/orders/:id/invoice', checkAuthenticated, (req, res) =>
+    OrdersController.invoice(req, res)
 );
 
 // Admin order management
@@ -493,7 +596,7 @@ app.post('/admin/refunds/:id/status', checkAuthenticated, checkAdmin, (req, res)
 );
 
 // Reorder all items from a past order into the cart
-app.post('/orders/:id/reorder', checkAuthenticated, (req, res) => {
+app.post('/orders/:id/reorder', checkAuthenticated, checkCustomer, (req, res) => {
     const orderId = parseInt(req.params.id, 10);
     if (Number.isNaN(orderId)) {
         req.flash('error', 'Invalid order.');

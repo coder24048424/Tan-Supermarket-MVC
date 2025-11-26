@@ -51,6 +51,8 @@
                   <span class="status-pill danger">Refunded</span>
                 <% } else if (refundStatus === 'refund_pending') { %>
                   <span class="status-pill warning">Pending</span>
+                <% } else if (refundStatus === 'refund_rejected') { %>
+                  <span class="status-pill danger">Rejected</span>
                 <% } else { %>
                   <span class="subtle-text">-</span>
                 <% } %>

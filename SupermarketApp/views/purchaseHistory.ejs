@@ -28,21 +28,32 @@
     </div>
   <% } else { %>
     <div class="d-flex flex-column gap-3">
+      <% orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); %>
       <% orders.forEach(order => { %>
         <% const placedOn = new Date(order.created_at); %>
         <% const itemCount = order.items ? order.items.length : (order.itemsCount || 0); %>
         <% const refundStatus = order.refundStatus || 'none'; %>
+        <% const orderStatus = (order.status || 'pending').toLowerCase(); %>
+        <% const shippingStatus = (order.shipping_status || 'processing').toLowerCase(); %>
         <div class="inventory-card">
           <div class="d-flex justify-content-between align-items-start">
             <div>
               <p class="subtle-text mb-1">Order #<%= order.id %></p>
               <h4><%= placedOn.toLocaleString() %></h4>
+              <p class="subtle-text mb-1">
+                Status:
+                <span class="status-pill <%= orderStatus === 'pending' ? 'warning' : 'success' %>"><%= orderStatus %></span>
+                Shipping:
+                <span class="status-pill"><%= shippingStatus %></span>
+              </p>
             </div>
             <div class="d-flex gap-2 align-items-center">
               <% if (refundStatus === 'refunded') { %>
                 <span class="status-pill danger">Refunded</span>
               <% } else if (refundStatus === 'refund_pending') { %>
                 <span class="status-pill warning">Refund pending</span>
+              <% } else if (refundStatus === 'refund_rejected') { %>
+                <span class="status-pill danger">Refund rejected</span>
               <% } %>
               <span class="status-pill success">$<%= order.total.toFixed(2) %></span>
             </div>
