@@ -211,6 +211,52 @@ function OrdersModel() {
       runQuery(true);
     },
 
+    getAllOrders(callback) {
+      const sqlWithNotes = `
+        SELECT o.id, o.user_id, o.total, o.status, o.shipping_status, o.created_at,
+               oi.product_id, oi.price, oi.quantity,
+               p.productName,
+               u.username, u.email
+        FROM orders o
+        JOIN order_items oi ON o.id = oi.order_id
+        JOIN products p ON oi.product_id = p.id
+        LEFT JOIN users u ON o.user_id = u.id
+        ORDER BY o.created_at DESC
+      `;
+
+      db.query(sqlWithNotes, [], (err, rows = []) => {
+        if (err) return callback(err);
+
+        const orders = {};
+        rows.forEach((r) => {
+          if (!orders[r.id]) {
+            orders[r.id] = {
+              id: r.id,
+              user_id: r.user_id,
+              username: r.username || 'Deleted user',
+              email: r.email || '',
+              total: Number(r.total),
+              notes: r.notes || '',
+              status: r.status || 'pending',
+              shipping_status: r.shipping_status || 'processing',
+              created_at: r.created_at,
+              items: []
+            };
+          }
+
+          orders[r.id].items.push({
+            product_id: r.product_id,
+            productName: r.productName,
+            price: Number(r.price) || 0,
+            quantity: r.quantity
+          });
+        });
+
+        const sorted = Object.values(orders).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        return callback(null, sorted);
+      });
+    },
+
     getOrderById(orderId, userId, callback) {
       const filterClause = userId ? 'AND o.user_id = ?' : '';
       const params = userId ? [orderId, userId] : [orderId];

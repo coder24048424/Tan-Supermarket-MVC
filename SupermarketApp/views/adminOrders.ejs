@@ -1,0 +1,78 @@
+<%- include('partials/head', { pageTitle: 'All orders', bodyClass: 'page-admin' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">All orders</h2>
+      <p class="subtle-text mb-0">Consolidated order history across all users.</p>
+    </div>
+    <a class="btn btn-secondary" href="/inventory">Back to inventory</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <% if (!orders || !orders.length) { %>
+    <div class="empty-state">
+      <p>No orders found.</p>
+    </div>
+  <% } else { %>
+    <div class="d-flex flex-column gap-3">
+      <% orders.forEach(order => { %>
+        <% const placedOn = new Date(order.created_at); %>
+        <% const itemCount = order.items ? order.items.length : 0; %>
+        <% const refundStatus = order.refundStatus || 'none'; %>
+        <% const orderStatus = (order.status || 'pending').toLowerCase(); %>
+        <% const shippingStatus = (order.shipping_status || 'processing').toLowerCase(); %>
+        <div class="inventory-card">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <p class="subtle-text mb-1">Order #<%= order.id %> <% if (order.username) { %>by <strong><%= order.username %></strong> (<%= order.email || '' %>)<% } %></p>
+              <h4><%= placedOn.toLocaleString() %></h4>
+              <p class="subtle-text mb-1">
+                Status:
+                <span class="status-pill <%= orderStatus === 'pending' ? 'warning' : 'success' %>"><%= orderStatus %></span>
+                Shipping:
+                <span class="status-pill"><%= shippingStatus %></span>
+              </p>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+              <% if (refundStatus === 'refunded') { %>
+                <span class="status-pill danger">Refunded</span>
+              <% } else if (refundStatus === 'refund_pending') { %>
+                <span class="status-pill warning">Refund pending</span>
+              <% } else if (refundStatus === 'refund_rejected') { %>
+                <span class="status-pill danger">Refund rejected</span>
+              <% } %>
+              <span class="status-pill success">$<%= Number(order.total || 0).toFixed(2) %></span>
+            </div>
+          </div>
+          <% if (order.items && order.items.length) { %>
+            <ul class="order-summary-list mt-3">
+              <% order.items.slice(0, 3).forEach(item => { %>
+                <li><strong><%= item.productName %></strong> &times; <%= item.quantity %></li>
+              <% }) %>
+              <% if (order.items.length > 3) { %>
+                <li class="subtle-text">+ <%= order.items.length - 3 %> more item(s)</li>
+              <% } %>
+            </ul>
+          <% } %>
+          <div class="d-flex justify-content-between align-items-center mt-3">
+            <span class="subtle-text"><%= itemCount || 'Multiple' %> items</span>
+            <a class="btn btn-primary" href="/orders/<%= order.id %>">View details</a>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

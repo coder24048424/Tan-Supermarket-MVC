@@ -111,6 +111,13 @@ const validateRegistration = (req, res, next) => {
         return res.redirect('/register');
     }
 
+    const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+    if (!strongPassword.test(password)) {
+        req.flash('error', 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
+        req.flash('formData', req.body);
+        return res.redirect('/register');
+    }
+
     const phoneDigits = String(contact || '').replace(/\D/g, '');
     if (phoneDigits.length < 8) {
         req.flash('error', 'Contact number must have at least 8 digits.');
@@ -566,6 +573,10 @@ app.get('/orders', checkAuthenticated, (req, res) =>
 // Order details
 app.get('/orders/:id', checkAuthenticated, (req, res) =>
     OrdersController.getOrderById(req, res)
+);
+// Admin all orders
+app.get('/admin/orders', checkAuthenticated, checkAdmin, (req, res) =>
+    OrdersController.adminAllOrders(req, res)
 );
 // Order invoice (HTML)
 app.get('/orders/:id/invoice', checkAuthenticated, (req, res) =>

@@ -254,6 +254,33 @@ function OrdersController() {
       });
     },
 
+    // ADMIN: view all orders
+    adminAllOrders(req, res) {
+      const sessionUser = req.session.user;
+      if (!sessionUser || sessionUser.role !== 'admin') {
+        req.flash('error', 'Access denied');
+        return res.redirect('/orders');
+      }
+
+      const errors = req.flash('error');
+      const success = req.flash('success');
+
+      OrdersModel.getAllOrders((err, orders = []) => {
+        if (err) {
+          console.error('Failed to load all orders:', err);
+          req.flash('error', 'Unable to load orders.');
+          return res.redirect('/orders');
+        }
+
+        return res.render('adminOrders', {
+          user: sessionUser,
+          orders,
+          errors,
+          success
+        });
+      });
+    },
+
     // ===============================
     // INVOICE VIEW
     // ===============================

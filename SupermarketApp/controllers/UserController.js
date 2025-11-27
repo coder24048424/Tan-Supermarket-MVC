@@ -1,8 +1,7 @@
 const UserModel = require('../models/UserModel');
 const OrdersModel = require('../models/OrdersModel');
 const RefundModel = require('../models/RefundModel');
-
-const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+const UserCartModel = require('../models/UserCartModel');
 
 function UserController() {
   return {
@@ -137,13 +136,13 @@ function UserController() {
           return res.redirect(`/admin/users/${id}/edit`);
         }
 
-        UserModel.deleteStudent(id, (delErr) => {
+        UserModel.updateStudent(id, { role: 'deleted' }, (delErr) => {
           if (delErr) {
             console.error(`Error deleting user ${id}:`, delErr);
             req.flash('error', 'Failed to delete user');
             return res.redirect('/admin/users');
           }
-          req.flash('success', 'User deleted');
+          req.flash('success', 'User deleted (orders retained)');
           return res.redirect('/admin/users');
         });
       });
@@ -241,18 +240,30 @@ function UserController() {
           return res.redirect('/register');
         }
 
-        UserModel.addStudent(userData, (err) => {
+        UserModel.addStudent(userData, (err, result = {}) => {
           if (err) {
             console.error('Error creating user:', err);
             req.flash('error', 'Failed to create user');
             req.flash('formData', req.body);
             return res.redirect('/register');
           }
+          const newUserId = result.insertId;
           // Auto-login the new user
           req.session.user = {
-            id: null, // will be refreshed on next fetch
+            id: newUserId,
             ...userData
           };
+          req.session.lastCartUserId = newUserId;
+
+          const guestCart = Array.isArray(req.session.cart) ? req.session.cart : [];
+          if (guestCart.length) {
+            UserCartModel.replaceCart(newUserId, guestCart, (persistErr) => {
+              if (persistErr) {
+                console.error('Failed to save guest cart for new user:', persistErr);
+              }
+            });
+          }
+
           req.flash('success', 'Registration successful! You are now logged in.');
           return res.redirect('/shopping');
         });
