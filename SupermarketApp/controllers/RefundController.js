@@ -88,6 +88,11 @@ function RefundController() {
           return res.redirect('/orders');
         }
 
+        if (String(order.owner_role || '').toLowerCase() === 'deleted') {
+          req.flash('error', 'This order belongs to a deleted account and is read-only.');
+          return res.redirect(`/orders/${orderId}`);
+        }
+
         RefundModel.createRefund(orderId, amount, reason, (err) => {
           if (err) {
             console.error('Failed to create refund:', err);
@@ -166,6 +171,17 @@ function RefundController() {
           return res.redirect('/admin/refunds');
         }
 
+        OrdersModel.getOrderById(refund.order_id, null, (orderErr, order) => {
+          if (orderErr || !order) {
+            req.flash('error', 'Order not found for this refund.');
+            return res.redirect('/admin/refunds');
+          }
+
+          if (String(order.owner_role || '').toLowerCase() === 'deleted') {
+            req.flash('error', 'This order belongs to a deleted account and is read-only.');
+            return res.redirect('/admin/refunds');
+          }
+
         const alreadyApproved = ['approved', 'processed'].includes(String(refund.status).toLowerCase());
 
         RefundModel.updateRefundStatus(refundId, status, (err) => {
@@ -182,40 +198,33 @@ function RefundController() {
           }
 
           // Restock items for the refunded order
-          OrdersModel.getOrderById(refund.order_id, null, (orderErr, order) => {
-            if (orderErr || !order) {
-              console.error('Refund approved but order not found for restock:', orderErr);
-              req.flash('error', 'Refund approved but could not restock items.');
-              return res.redirect('/admin/refunds');
-            }
+          const items = order.items || [];
+          if (!items.length) {
+            req.flash('success', 'Refund approved. No items to restock.');
+            return res.redirect('/admin/refunds');
+          }
 
-            const items = order.items || [];
-            if (!items.length) {
-              req.flash('success', 'Refund approved. No items to restock.');
-              return res.redirect('/admin/refunds');
-            }
-
-            let pending = items.length;
-            let failed = false;
-            items.forEach((item) => {
-              const sql = 'UPDATE products SET quantity = quantity + ? WHERE id = ?';
-              db.query(sql, [item.quantity, item.product_id], (qErr) => {
-                if (qErr && !failed) {
-                  failed = true;
-                  console.error('Failed to restock item', item.product_id, qErr);
+          let pending = items.length;
+          let failed = false;
+          items.forEach((item) => {
+            const sql = 'UPDATE products SET quantity = quantity + ? WHERE id = ?';
+            db.query(sql, [item.quantity, item.product_id], (qErr) => {
+              if (qErr && !failed) {
+                failed = true;
+                console.error('Failed to restock item', item.product_id, qErr);
+              }
+              pending -= 1;
+              if (pending === 0) {
+                if (failed) {
+                  req.flash('error', 'Refund approved, but some items failed to restock.');
+                } else {
+                  req.flash('success', 'Refund approved and stock restored.');
                 }
-                pending -= 1;
-                if (pending === 0) {
-                  if (failed) {
-                    req.flash('error', 'Refund approved, but some items failed to restock.');
-                  } else {
-                    req.flash('success', 'Refund approved and stock restored.');
-                  }
-                  return res.redirect('/admin/refunds');
-                }
-              });
+                return res.redirect('/admin/refunds');
+              }
             });
           });
+        });
         });
       });
     }

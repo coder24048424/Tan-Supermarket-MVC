@@ -1,0 +1,97 @@
+<%- include('partials/head', { pageTitle: 'Admin Dashboard', bodyClass: 'page-admin' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Admin dashboard</h2>
+      <p class="subtle-text mb-0">Overview of store performance, inventory, and customers.</p>
+    </div>
+    <a class="btn btn-primary" href="/inventory">Manage inventory</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <div class="metric-grid mt-3">
+    <div class="metric-card">
+      <p class="subtle-text mb-1">Revenue (all time)</p>
+      <h3>$<%= (overview.orders.revenue || 0).toFixed(2) %></h3>
+    </div>
+    <div class="metric-card">
+      <p class="subtle-text mb-1">Orders</p>
+      <h3><%= overview.orders.total %></h3>
+      <p class="subtle-text mb-0">Pending: <strong><%= overview.orders.pending %></strong> · Delivered: <strong><%= overview.orders.delivered %></strong></p>
+    </div>
+    <div class="metric-card">
+      <p class="subtle-text mb-1">Users</p>
+      <h3><%= overview.users.total %></h3>
+      <p class="subtle-text mb-0">Admins: <strong><%= overview.users.admins %></strong> · Deleted: <strong><%= overview.users.deleted %></strong></p>
+    </div>
+    <div class="metric-card">
+      <p class="subtle-text mb-1">Inventory</p>
+      <h3><%= overview.products.total %> items</h3>
+      <p class="subtle-text mb-0">Low: <strong><%= overview.products.lowStock %></strong> · Out: <strong><%= overview.products.outOfStock %></strong></p>
+    </div>
+    <div class="metric-card">
+      <p class="subtle-text mb-1">Pending refunds</p>
+      <h3><%= overview.refunds.pending %></h3>
+    </div>
+  </div>
+</section>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h3 class="section-title mb-1">Recent orders</h3>
+      <p class="subtle-text mb-0">Latest activity across the store.</p>
+    </div>
+    <a class="btn btn-secondary" href="/admin/orders">View all</a>
+  </div>
+
+  <% if (!recentOrders || !recentOrders.length) { %>
+    <div class="empty-state">
+      <p>No orders yet.</p>
+    </div>
+  <% } else { %>
+    <div class="table-responsive">
+      <table class="table-modern w-100">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Customer</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Items</th>
+            <th>Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% recentOrders.forEach(o => { %>
+            <% const status = String(o.status || '').toLowerCase(); %>
+            <% const statusClass = status === 'pending' ? 'warning' : 'success'; %>
+            <tr>
+              <td>#<%= o.id %></td>
+              <td><%= o.user %></td>
+              <td>$<%= o.total.toFixed(2) %></td>
+              <td><span class="status-pill <%= statusClass %>"><%= status === 'pending' ? 'Pending' : 'Delivered' %></span></td>
+              <td><%= o.items %></td>
+              <td><%= o.created_at ? new Date(o.created_at).toLocaleString() : '' %></td>
+              <td><a class="btn btn-link" href="/orders/<%= o.id %>">View</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

@@ -3,6 +3,8 @@ const OrdersModel = require('../models/OrdersModel');
 const RefundModel = require('../models/RefundModel');
 const UserCartModel = require('../models/UserCartModel');
 
+const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
 function UserController() {
   return {
     // List all users
@@ -51,6 +53,67 @@ function UserController() {
       });
     },
 
+    // USER: profile view
+    profilePage(req, res) {
+      const sessionUser = req.session.user;
+      if (!sessionUser) return res.redirect('/login');
+
+      const errors = req.flash('error');
+      const success = req.flash('success');
+
+      UserModel.getStudentById(sessionUser.id, (err, userProfile) => {
+        if (err || !userProfile) {
+          req.flash('error', 'Unable to load profile');
+          return res.redirect('/');
+        }
+        return res.render('profile', { userProfile, user: sessionUser, errors, success });
+      });
+    },
+
+    // USER: profile update
+    profileUpdate(req, res) {
+      const sessionUser = req.session.user;
+      if (!sessionUser) return res.redirect('/login');
+
+      const {
+        username = '',
+        email = '',
+        address = '',
+        contact = '',
+        password = '',
+        confirmPassword = ''
+      } = req.body;
+
+      if (!username || !email || !address || !contact) {
+        req.flash('error', 'All fields except password are required.');
+        return res.redirect('/profile');
+      }
+
+      const updates = { username: username.trim(), email: email.trim(), address: address.trim(), contact: contact.trim() };
+
+      if (password || confirmPassword) {
+        if (password !== confirmPassword) {
+          req.flash('error', 'Passwords must match.');
+          return res.redirect('/profile');
+        }
+        if (!strongPassword.test(password)) {
+          req.flash('error', 'Password must be at least 8 chars and include upper, lower, number, and special.');
+          return res.redirect('/profile');
+        }
+        updates.password = password;
+      }
+
+      UserModel.updateStudent(sessionUser.id, updates, (err) => {
+        if (err) {
+          console.error('Failed to update profile:', err);
+          req.flash('error', 'Unable to update profile right now.');
+          return res.redirect('/profile');
+        }
+        req.flash('success', 'Profile updated.');
+        return res.redirect('/profile');
+      });
+    },
+
     // ADMIN: show edit form
     adminEditForm(req, res) {
       const errors = req.flash('error');
@@ -65,6 +128,10 @@ function UserController() {
           req.flash('error', 'User not found');
           return res.redirect('/admin/users');
         }
+        if (String(userProfile.role || '').toLowerCase() === 'deleted') {
+          req.flash('error', 'This account is deleted and read-only.');
+          return res.redirect('/admin/users');
+        }
         return res.render('userEdit', { userProfile, user: req.session.user, errors, success });
       });
     },
@@ -77,43 +144,55 @@ function UserController() {
         return res.redirect('/admin/users');
       }
 
-      const {
-        username = '',
-        email = '',
-        address = '',
-        contact = '',
-        role = '',
-        password = '',
-        confirmPassword = ''
-      } = req.body;
+      UserModel.getStudentById(id, (findErr, existing) => {
+        if (findErr || !existing) {
+          req.flash('error', 'User not found');
+          return res.redirect('/admin/users');
+        }
 
-      if (!username || !email || !address || !contact || !role) {
-        req.flash('error', 'All fields except password are required.');
-        return res.redirect(`/admin/users/${id}/edit`);
-      }
+        if (String(existing.role || '').toLowerCase() === 'deleted') {
+          req.flash('error', 'This account is deleted and read-only.');
+          return res.redirect('/admin/users');
+        }
 
-      const updates = { username: username.trim(), email: email.trim(), address: address.trim(), contact: contact.trim(), role: role.trim() };
+        const {
+          username = '',
+          email = '',
+          address = '',
+          contact = '',
+          role = '',
+          password = '',
+          confirmPassword = ''
+        } = req.body;
 
-      if (password || confirmPassword) {
-        if (password !== confirmPassword) {
-          req.flash('error', 'Passwords must match.');
+        if (!username || !email || !address || !contact || !role) {
+          req.flash('error', 'All fields except password are required.');
           return res.redirect(`/admin/users/${id}/edit`);
         }
-        if (!strongPassword.test(password)) {
-          req.flash('error', 'Password must be at least 8 chars and include upper, lower, number, and special.');
-          return res.redirect(`/admin/users/${id}/edit`);
-        }
-        updates.password = password;
-      }
 
-      UserModel.updateStudent(id, updates, (err) => {
-        if (err) {
-          console.error(`Error updating user ${id}:`, err);
-          req.flash('error', 'Failed to update user');
-          return res.redirect(`/admin/users/${id}/edit`);
+        const updates = { username: username.trim(), email: email.trim(), address: address.trim(), contact: contact.trim(), role: role.trim() };
+
+        if (password || confirmPassword) {
+          if (password !== confirmPassword) {
+            req.flash('error', 'Passwords must match.');
+            return res.redirect(`/admin/users/${id}/edit`);
+          }
+          if (!strongPassword.test(password)) {
+            req.flash('error', 'Password must be at least 8 chars and include upper, lower, number, and special.');
+            return res.redirect(`/admin/users/${id}/edit`);
+          }
+          updates.password = password;
         }
-        req.flash('success', 'User updated');
-        return res.redirect('/admin/users');
+
+        UserModel.updateStudent(id, updates, (err) => {
+          if (err) {
+            console.error(`Error updating user ${id}:`, err);
+            req.flash('error', 'Failed to update user');
+            return res.redirect(`/admin/users/${id}/edit`);
+          }
+          req.flash('success', 'User updated');
+          return res.redirect('/admin/users');
+        });
       });
     },
 

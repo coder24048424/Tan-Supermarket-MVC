@@ -4,7 +4,12 @@
   <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
     <div>
       <h2 class="section-title mb-1">Orders for <%= userProfile.username %></h2>
-      <p class="subtle-text mb-0"><%= userProfile.email %> | Role: <%= (userProfile.role || '').toUpperCase() %></p>
+      <p class="subtle-text mb-0">
+        <%= userProfile.email %> | Role: <%= (userProfile.role || '').toUpperCase() %>
+        <% if ((userProfile.role || '').toLowerCase() === 'deleted') { %>
+          <span class="status-pill danger ms-2">Read-only</span>
+        <% } %>
+      </p>
     </div>
     <a class="btn btn-secondary" href="/admin/users">Back to users</a>
   </div>

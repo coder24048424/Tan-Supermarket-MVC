@@ -88,7 +88,7 @@
 <section class="glass-panel">
   <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
     <div>
-      <h2 class="section-title">Top seller this week</h2>
+      <h2 class="section-title">Best seller</h2>
       <p class="subtle-text mb-0">Straight from Tan's Supermarket sales board.</p>
     </div>
       <% if (bestSeller) { %>
@@ -149,11 +149,11 @@
     <% } %>
   </section>
 
-<% if (user) { %>
+<% if (user && hasPurchaseHistory) { %>
   <section class="glass-panel">
     <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
       <div>
-        <h2 class="section-title">Frequent buys</h2>
+      <h2 class="section-title">Purchase frequently</h2>
         <p class="subtle-text mb-0">Items you reach for most often, ready to re-add.</p>
       </div>
       <a class="btn btn-secondary" href="/shopping">Browse more</a>

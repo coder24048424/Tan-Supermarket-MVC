@@ -25,7 +25,7 @@
   <% if (stats) { %>
     <div class="metric-grid mt-4">
       <div class="metric-card">
-        <p class="subtle-text mb-1">Catalogue size</p>
+        <p class="subtle-text mb-1">Total Product</p>
         <h3><%= stats.totalProducts %></h3>
       </div>
       <div class="metric-card">
@@ -40,6 +40,18 @@
         <p class="subtle-text mb-1">Out of stock</p>
         <h3><%= stats.outOfStockCount %></h3>
       </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+      <span class="subtle-text mb-0">Quick filters:</span>
+      <a class="btn <%= filters.stock === 'low' ? 'btn-primary' : 'btn-secondary' %>" href="/inventory?stock=low">
+        Low stock (<%= stats.lowStockCount %>)
+      </a>
+      <a class="btn <%= filters.stock === 'out' ? 'btn-primary' : 'btn-secondary' %>" href="/inventory?stock=out">
+        Out of stock (<%= stats.outOfStockCount %>)
+      </a>
+      <% if (filters.stock === 'low' || filters.stock === 'out') { %>
+        <a class="btn btn-link" href="/inventory">Clear</a>
+      <% } %>
     </div>
   <% } %>
 

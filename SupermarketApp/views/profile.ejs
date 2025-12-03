@@ -1,0 +1,73 @@
+<%- include('partials/head', { pageTitle: 'My Profile', bodyClass: 'page-profile' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">My profile</h2>
+      <p class="subtle-text mb-0">Update your details and review your activity.</p>
+    </div>
+    <% if (user && user.role !== 'admin') { %>
+      <a class="btn btn-secondary" href="/orders">View orders</a>
+    <% } else { %>
+      <span class="btn btn-secondary disabled" aria-disabled="true">View orders</span>
+    <% } %>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <div class="split-layout">
+    <div class="form-panel">
+      <form action="/profile" method="POST" class="d-grid gap-3">
+        <div>
+          <label class="form-label" for="username">Name</label>
+          <input type="text" id="username" name="username" class="form-control" value="<%= userProfile.username || '' %>" required>
+        </div>
+        <div>
+          <label class="form-label" for="email">Email</label>
+          <input type="email" id="email" name="email" class="form-control" value="<%= userProfile.email || '' %>" required>
+        </div>
+        <div>
+          <label class="form-label" for="address">Address</label>
+          <input type="text" id="address" name="address" class="form-control" value="<%= userProfile.address || '' %>" required>
+        </div>
+        <div>
+          <label class="form-label" for="contact">Phone</label>
+          <input type="tel" id="contact" name="contact" class="form-control" value="<%= userProfile.contact || '' %>" required>
+        </div>
+        <div>
+          <label class="form-label" for="password">New password (optional)</label>
+          <input type="password" id="password" name="password" class="form-control" placeholder="Leave blank to keep current password">
+        </div>
+        <div>
+          <label class="form-label" for="confirmPassword">Confirm new password</label>
+          <input type="password" id="confirmPassword" name="confirmPassword" class="form-control" placeholder="Repeat new password">
+        </div>
+        <button type="submit" class="btn btn-primary">Save changes</button>
+      </form>
+    </div>
+
+    <div class="summary-card">
+      <h4>Account</h4>
+      <div class="summary-row"><span>Role</span><span><%= (userProfile.role || '').toUpperCase() %></span></div>
+      <div class="summary-row"><span>Email</span><span><%= userProfile.email %></span></div>
+      <div class="summary-row"><span>Phone</span><span><%= userProfile.contact %></span></div>
+      <div class="summary-row"><span>Address</span><span><%= userProfile.address %></span></div>
+      <% if (user && user.role !== 'admin') { %>
+        <div class="mt-3">
+          <a class="btn btn-secondary w-100" href="/orders">View purchase history</a>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

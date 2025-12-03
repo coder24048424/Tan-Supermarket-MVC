@@ -1,0 +1,90 @@
+<%- include('partials/head', { pageTitle: 'Confirm order', bodyClass: 'page-checkout' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Confirm your order</h2>
+      <p class="subtle-text mb-0">Review items and delivery details before placing the order.</p>
+    </div>
+    <a class="btn btn-secondary" href="/checkout">Edit details</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <div class="split-layout">
+    <div class="summary-card">
+      <h4>Delivery details</h4>
+      <div class="summary-row">
+        <span>Name</span>
+        <span><%= firstName %></span>
+      </div>
+      <div class="summary-row">
+        <span>Address</span>
+        <span><%= address %></span>
+      </div>
+      <div class="summary-row">
+        <span>Phone</span>
+        <span><%= phone %></span>
+      </div>
+      <% if (notes) { %>
+        <div class="summary-row">
+          <span>Notes</span>
+          <span><%= notes %></span>
+        </div>
+      <% } %>
+      <form action="/checkout" method="POST" class="mt-3 d-grid gap-2">
+        <input type="hidden" name="firstName" value="<%= firstName %>">
+        <input type="hidden" name="address" value="<%= address %>">
+        <input type="hidden" name="phone" value="<%= phone %>">
+        <input type="hidden" name="notes" value="<%= notes %>">
+        <button type="submit" class="btn btn-primary btn-lg">Place order &rarr; $<%= total.toFixed(2) %></button>
+      </form>
+    </div>
+
+    <div>
+      <div class="summary-card">
+        <h4>Order summary</h4>
+        <div class="summary-row">
+          <span>Items</span>
+          <span><%= cart.length %></span>
+        </div>
+        <div class="summary-row">
+          <span>Total</span>
+          <span class="summary-total">$<%= total.toFixed(2) %></span>
+        </div>
+      </div>
+
+      <table class="table-modern mt-3">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% cart.forEach(item => { %>
+            <tr>
+              <td><strong><%= item.productName %></strong></td>
+              <td><%= item.quantity %></td>
+              <td>$<%= Number(item.price || 0).toFixed(2) %></td>
+              <td>$<%= (Number(item.price || 0) * item.quantity).toFixed(2) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

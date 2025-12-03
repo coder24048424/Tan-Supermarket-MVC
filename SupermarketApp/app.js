@@ -8,11 +8,13 @@ const ProductController = require('./controllers/ProductController');
 const UserController = require('./controllers/UserController');
 const OrdersController = require('./controllers/OrdersController');
 const RefundController = require('./controllers/RefundController');
+const AdminDashboardController = require('./controllers/AdminDashboardController');
+const HomeController = require('./controllers/HomeController');
+const CartController = require('./controllers/CartController');
 const ProductModel = require('./models/ProductModel');
 const UserModel = require('./models/UserModel');
 const RefundModel = require('./models/RefundModel');
 const UserCartModel = require('./models/UserCartModel');
-const { buildCategories, CATEGORY_NAMES } = require('./utils/catalog');
 
 const app = express();
 
@@ -45,6 +47,30 @@ app.use(session({
 
 app.use(flash());
 
+// Validate that the session user still exists (handles deleted users)
+app.use((req, res, next) => {
+    const user = req.session.user;
+    if (!user) return next();
+
+    UserModel.getStudentById(user.id, (err, freshUser) => {
+        if (err) {
+            console.error('Failed to validate session user:', err);
+            return next();
+        }
+        if (!freshUser || (freshUser.role && freshUser.role.toLowerCase() === 'deleted')) {
+            // wipe session if user no longer exists or is marked deleted
+            req.session.user = null;
+            req.session.cart = [];
+            req.session.lastCartUserId = null;
+            req.flash('error', 'Your account is no longer available. Please contact support or register again.');
+            return res.redirect('/login');
+        }
+        // keep session in sync with any updates
+        req.session.user = freshUser;
+        return next();
+    });
+});
+
 // Keep cart in sync across sessions/browsers by hydrating from DB for logged-in users
 app.use((req, res, next) => {
     const user = req.session.user;
@@ -62,7 +88,7 @@ app.use((req, res, next) => {
     res.locals.user = req.session.user || null;
     const cart = req.session.cart || [];
     res.locals.cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-    res.locals.navCategories = CATEGORY_NAMES;
+    res.locals.navCategories = [];
     res.locals.pendingRefundCount = 0;
     if (res.locals.user && res.locals.user.role === 'admin') {
         return RefundModel.getPendingCount((err, count) => {
@@ -77,9 +103,34 @@ app.use((req, res, next) => {
 // Auth Middlewares
 // ========================
 const checkAuthenticated = (req, res, next) => {
-    if (req.session.user) return next();
-    req.flash('error', 'Please log in to view this page.');
-    res.redirect('/login');
+    const sessionUser = req.session.user;
+    if (!sessionUser) {
+        req.flash('error', 'Please log in to view this page.');
+        return res.redirect('/login');
+    }
+
+    // Re-validate user exists (handles deleted users)
+    UserModel.getStudentById(sessionUser.id, (err, freshUser) => {
+        if (err) {
+            console.error('Failed to validate user session:', err);
+            req.flash('error', 'Please log in again.');
+            req.session.user = null;
+            req.session.cart = [];
+            req.session.lastCartUserId = null;
+            return res.redirect('/login');
+        }
+
+        if (!freshUser || (freshUser.role && freshUser.role.toLowerCase() === 'deleted')) {
+            req.flash('error', 'Your account is no longer available. Please contact support or register again.');
+            req.session.user = null;
+            req.session.cart = [];
+            req.session.lastCartUserId = null;
+            return res.redirect('/login');
+        }
+
+        req.session.user = freshUser;
+        return next();
+    });
 };
 
 const checkAdmin = (req, res, next) => {
@@ -133,36 +184,12 @@ const validateRegistration = (req, res, next) => {
 // ========================
 
 // Home
-app.get('/', (req, res) => {
-    ProductModel.getAllProducts((err, products = []) => {
-        if (err) {
-            console.error('Failed to load products for homepage:', err);
-            return res.render('index', {
-                user: req.session.user,
-                bestSeller: null,
-                categories: [],
-                newProducts: []
-            });
-        }
+app.get('/', HomeController.homePage);
 
-        const bestSeller = products.reduce((top, product) => {
-            if (!top) return product;
-            return (product.quantity || 0) > (top.quantity || 0) ? product : top;
-        }, null);
-
-        const categories = buildCategories(products);
-        const newProducts = [...products]
-            .sort((a, b) => (b.id || 0) - (a.id || 0))
-            .slice(0, 4);
-
-        res.render('index', {
-            user: req.session.user,
-            bestSeller,
-            categories,
-            newProducts
-        });
-    });
-});
+// Admin dashboard
+app.get('/admin/dashboard', checkAuthenticated, checkAdmin, (req, res) =>
+    AdminDashboardController.dashboard(req, res)
+);
 
 // ========================
 // AUTH
@@ -200,6 +227,11 @@ app.post('/login', (req, res) => {
 
         if (!match) {
             req.flash('error', 'Invalid email or password.');
+            return res.redirect('/login');
+        }
+
+        if (String(match.role || '').toLowerCase() === 'deleted') {
+            req.flash('error', 'This account has been deactivated.');
             return res.redirect('/login');
         }
 
@@ -293,214 +325,29 @@ app.get('/shopping', (req, res) =>
 // ========================
 
 // Add to cart (guests allowed; admins blocked)
-app.post('/add-to-cart/:id', (req, res, next) => checkCustomer(req, res, next), (req, res) => {
-    const productId = parseInt(req.params.id, 10);
-    const quantity = parseInt(req.body.quantity, 10) || 1;
-
-    const sessionUser = req.session.user;
-
-    const ensureSessionCart = (cb) => {
-        if (sessionUser && sessionUser.role !== 'admin') {
-            return UserCartModel.getCartForUser(sessionUser.id, (cartErr, persistedCart = []) => {
-                if (!cartErr) req.session.cart = persistedCart;
-                return cb();
-            });
-        }
-        return cb();
-    };
-
-    ensureSessionCart(() => {
-        const wasEmpty = !req.session.cart || req.session.cart.length === 0;
-
-        ProductModel.getProductById(productId, (err, product) => {
-            if (err || !product) {
-                req.flash('error', 'Unable to add this product right now.');
-                return res.redirect('/shopping');
-            }
-
-            if (!req.session.cart) req.session.cart = [];
-
-            const existing = req.session.cart.find(i => i.productId === productId);
-            const available = Number(product.quantity) || 0;
-
-            if (available === 0) {
-                req.flash('error', `${product.productName} is currently out of stock.`);
-                return res.redirect('/shopping');
-            }
-
-            const existingQty = existing ? existing.quantity : 0;
-            const desiredQty = existingQty + quantity;
-
-            let nextQuantity = desiredQty;
-            let capped = false;
-            if (desiredQty > available) {
-                nextQuantity = available;
-                capped = true;
-            }
-
-            if (existing) {
-                existing.quantity = nextQuantity;
-            } else {
-                req.session.cart.push({
-                    productId: product.id,
-                    productName: product.productName,
-                    price: product.price,
-                    quantity: nextQuantity,
-                    image: product.image
-                });
-            }
-
-            const destination = '/cart';
-            if (!sessionUser || sessionUser.role === 'admin') {
-                if (capped) {
-                    req.flash('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
-                } else {
-                    req.flash('success', `${product.productName} added to your cart.`);
-                }
-                return res.redirect(destination);
-            }
-
-            return UserCartModel.setItemQuantity(sessionUser.id, product.id, nextQuantity, (persistErr) => {
-                if (persistErr) {
-                    console.error('Failed to persist cart item:', persistErr);
-                    req.flash('error', 'Unable to update your cart right now.');
-                    return res.redirect('/shopping');
-                }
-                if (capped) {
-                    req.flash('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
-                } else {
-                    req.flash('success', `${product.productName} added to your cart.`);
-                }
-                return res.redirect(destination);
-            });
-        });
-    });
-});
+app.post('/add-to-cart/:id', (req, res, next) => checkCustomer(req, res, next), (req, res) =>
+    CartController.addToCart(req, res)
+);
 
 // Cart page
-app.get('/cart', (req, res) => {
-    res.render('cart', {
-        cart: req.session.cart || [],
-        user: req.session.user,
-        errors: req.flash('error'),
-        success: req.flash('success')
-    });
-});
+app.get('/cart', (req, res) =>
+    CartController.cartPage(req, res)
+);
 
 // Remove from cart
-app.get('/remove-from-cart/:id', (req, res) => {
-    const productId = parseInt(req.params.id, 10);
-
-    if (!req.session.cart) req.session.cart = [];
-
-    req.session.cart = req.session.cart.filter(item => item.productId !== productId);
-    const user = req.session.user;
-    if (user && user.role !== 'admin') {
-        UserCartModel.removeItem(user.id, productId, (err) => {
-            if (err) {
-                console.error('Failed to remove cart item:', err);
-                req.flash('error', 'Unable to remove item right now.');
-                return res.redirect('/cart');
-            }
-            req.flash('success', 'Item removed.');
-            return res.redirect('/cart');
-        });
-    } else {
-        req.flash('success', 'Item removed.');
-        return res.redirect('/cart');
-    }
-});
+app.get('/remove-from-cart/:id', (req, res) =>
+    CartController.removeFromCart(req, res)
+);
 
 // Clear entire cart
-app.post('/cart/clear', (req, res) => {
-    if (!req.session.cart) req.session.cart = [];
-    req.session.cart = [];
-    const user = req.session.user;
-    if (user && user.role !== 'admin') {
-        UserCartModel.clearCart(user.id, (err) => {
-            if (err) {
-                console.error('Failed to clear cart:', err);
-                req.flash('error', 'Unable to clear cart right now.');
-                return res.redirect('/cart');
-            }
-            req.flash('success', 'Cart cleared.');
-            return res.redirect('/cart');
-        });
-    } else {
-        req.flash('success', 'Cart cleared.');
-        return res.redirect('/cart');
-    }
-});
+app.post('/cart/clear', (req, res) =>
+    CartController.clearCart(req, res)
+);
 
 // Update quantity in cart
-app.post('/cart/update/:id', (req, res) => {
-    const productId = parseInt(req.params.id, 10);
-    const quantity = parseInt(req.body.quantity, 10);
-    const delta = parseInt(req.body.delta, 10);
-
-    if (Number.isNaN(productId)) {
-        req.flash('error', 'Invalid product.');
-        return res.redirect('/cart');
-    }
-
-    if (!req.session.cart) req.session.cart = [];
-
-    ProductModel.getProductById(productId, (err, product) => {
-        if (err || !product) {
-            req.flash('error', 'Unable to update this item right now.');
-            return res.redirect('/cart');
-        }
-
-        const existing = req.session.cart.find(i => i.productId === productId);
-        if (!existing) {
-            req.flash('error', 'Item not found in cart.');
-            return res.redirect('/cart');
-        }
-
-        const available = Number(product.quantity) || 0;
-        const currentQty = existing.quantity || 0;
-        let desiredQty;
-        if (!Number.isNaN(delta)) {
-            desiredQty = currentQty + delta;
-        } else {
-            desiredQty = Number.isNaN(quantity) ? currentQty : quantity;
-        }
-
-        const sanitizedQty = Math.max(0, desiredQty);
-        const nextQuantity = Math.min(sanitizedQty, available);
-
-        const applyUpdate = (cb) => {
-            if (nextQuantity === 0) {
-                req.session.cart = req.session.cart.filter(i => i.productId !== productId);
-                if (req.session.user && req.session.user.role !== 'admin') {
-                    return UserCartModel.removeItem(req.session.user.id, productId, cb);
-                }
-                return cb();
-            }
-            existing.quantity = nextQuantity;
-            if (req.session.user && req.session.user.role !== 'admin') {
-                return UserCartModel.setItemQuantity(req.session.user.id, productId, nextQuantity, cb);
-            }
-            return cb();
-        };
-
-        applyUpdate((persistErr) => {
-            if (persistErr) {
-                console.error('Failed to update cart quantity:', persistErr);
-                req.flash('error', 'Unable to update cart right now.');
-                return res.redirect('/cart');
-            }
-            if (nextQuantity === 0) {
-                req.flash('success', 'Item removed.');
-            } else if (sanitizedQty > available) {
-                req.flash('error', `${product.productName} only has ${available} in stock. Quantity adjusted.`);
-            } else {
-                req.flash('success', 'Quantity updated.');
-            }
-            return res.redirect('/cart');
-        });
-    });
-});
+app.post('/cart/update/:id', (req, res) =>
+    CartController.updateQuantity(req, res)
+);
 
 // ========================
 // ADMIN PRODUCT MGMT
@@ -560,6 +407,11 @@ app.get('/checkout', checkAuthenticated, checkCustomer, (req, res) =>
     OrdersController.checkoutPage(req, res)
 );
 
+// Confirm checkout (review)
+app.post('/checkout/confirm', checkAuthenticated, checkCustomer, (req, res) =>
+    OrdersController.checkoutConfirm(req, res)
+);
+
 // Place order
 app.post('/checkout', checkAuthenticated, checkCustomer, (req, res) =>
     OrdersController.placeOrder(req, res)
@@ -604,6 +456,14 @@ app.get('/admin/refunds', checkAuthenticated, checkAdmin, (req, res) =>
 );
 app.post('/admin/refunds/:id/status', checkAuthenticated, checkAdmin, (req, res) =>
     RefundController.updateStatus(req, res)
+);
+
+// Profile
+app.get('/profile', checkAuthenticated, (req, res) =>
+    UserController.profilePage(req, res)
+);
+app.post('/profile', checkAuthenticated, (req, res) =>
+    UserController.profileUpdate(req, res)
 );
 
 // Reorder all items from a past order into the cart

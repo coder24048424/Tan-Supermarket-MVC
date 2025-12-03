@@ -9,6 +9,30 @@
     <a class="btn btn-secondary" href="/inventory">Back to inventory</a>
   </div>
 
+  <form class="catalog-toolbar mb-3" method="GET" action="/admin/orders">
+    <div class="catalog-toolbar-inner">
+      <div class="search-field flex-fill">
+        <input type="text" name="user" placeholder="Search by customer name/email" value="<%= filters && filters.user ? filters.user : '' %>">
+      </div>
+      <div class="toolbar-selects">
+        <select name="status">
+          <% const statusOptions = ['all','pending','delivered']; %>
+          <% statusOptions.forEach(opt => { %>
+            <option value="<%= opt %>" <%= filters && filters.status === opt ? 'selected' : '' %>><%= opt === 'all' ? 'All statuses' : opt.charAt(0).toUpperCase() + opt.slice(1) %></option>
+          <% }) %>
+        </select>
+        <input type="date" name="start" value="<%= filters && filters.start ? filters.start : '' %>">
+        <input type="date" name="end" value="<%= filters && filters.end ? filters.end : '' %>">
+      </div>
+      <div class="toolbar-actions ms-auto">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <% if (filters && (filters.status !== 'all' || filters.user || filters.start || filters.end)) { %>
+          <a class="btn btn-link" href="/admin/orders">Reset</a>
+        <% } %>
+      </div>
+    </div>
+  </form>
+
   <% if (errors && errors.length) { %>
     <div class="toast error mb-3">
       <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>

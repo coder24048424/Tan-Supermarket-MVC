@@ -49,20 +49,27 @@
         <span><%= order.items.length %></span>
       </div>
       <% if (user && user.role === 'admin') { %>
-        <form action="/orders/<%= order.id %>/status" method="POST" class="mt-3 d-grid gap-2">
-          <label class="form-label" for="status">Order status</label>
-          <select class="form-select" id="status" name="status">
-            <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
-            <option value="delivered" <%= status === 'delivered' ? 'selected' : '' %>>Delivered</option>
-          </select>
-          <label class="form-label" for="shipping_status">Shipping status</label>
-          <select class="form-select" id="shipping_status" name="shipping_status">
-            <option value="processing" <%= (order.shipping_status || '').toLowerCase() === 'processing' ? 'selected' : '' %>>Processing</option>
-            <option value="shipped" <%= (order.shipping_status || '').toLowerCase() === 'shipped' ? 'selected' : '' %>>Shipped</option>
-            <option value="delivered" <%= (order.shipping_status || '').toLowerCase() === 'delivered' ? 'selected' : '' %>>Delivered</option>
-          </select>
-          <button type="submit" class="btn btn-primary">Update status</button>
-        </form>
+        <% if (ownerDeleted) { %>
+          <div class="note-card mt-3">
+            <strong>Read-only</strong>
+            <div class="subtle-text mb-0">This order belongs to a deleted account. Viewing only; updates are disabled.</div>
+          </div>
+        <% } else { %>
+          <form action="/orders/<%= order.id %>/status" method="POST" class="mt-3 d-grid gap-2">
+            <label class="form-label" for="status">Order status</label>
+            <select class="form-select" id="status" name="status">
+              <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
+              <option value="delivered" <%= status === 'delivered' ? 'selected' : '' %>>Delivered</option>
+            </select>
+            <label class="form-label" for="shipping_status">Shipping status</label>
+            <select class="form-select" id="shipping_status" name="shipping_status">
+              <option value="processing" <%= (order.shipping_status || '').toLowerCase() === 'processing' ? 'selected' : '' %>>Processing</option>
+              <option value="shipped" <%= (order.shipping_status || '').toLowerCase() === 'shipped' ? 'selected' : '' %>>Shipped</option>
+              <option value="delivered" <%= (order.shipping_status || '').toLowerCase() === 'delivered' ? 'selected' : '' %>>Delivered</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Update status</button>
+          </form>
+        <% } %>
       <% } %>
       <% if (order.notes) { %>
         <% const noteLines = (order.notes || '').split(/\n/).filter(Boolean); %>

@@ -1,10 +1,11 @@
 <% const currentUser = typeof user === 'undefined' ? null : user; %>
 <header class="app-header">
   <div class="nav-shell">
-    <a class="brand-logo" href="<%= currentUser && currentUser.role === 'admin' ? '/inventory' : '/' %>">Tan's Supermarket</a>
+    <a class="brand-logo" href="<%= currentUser && currentUser.role === 'admin' ? '/admin/dashboard' : '/' %>">Tan's Supermarket</a>
 
     <ul class="nav-list">
       <% if (currentUser && currentUser.role === 'admin') { %>
+        <li><a href="/admin/dashboard">Dashboard</a></li>
         <li><a href="/inventory">Inventory</a></li>
         <li><a href="/addProduct">Add Products</a></li>
         <li><a href="/admin/users">Users</a></li>
@@ -17,10 +18,12 @@
             <% } %>
           </a>
         </li>
+        <li><a href="/profile">Profile</a></li>
       <% } else if (currentUser) { %>
         <li><a href="/">Home</a></li>
         <li><a href="/shopping">Shop</a></li>
         <li><a href="/orders">Orders</a></li>
+        <li><a href="/profile">Profile</a></li>
       <% } else { %>
         <li><a href="/">Home</a></li>
         <li><a href="/shopping">Shop</a></li>

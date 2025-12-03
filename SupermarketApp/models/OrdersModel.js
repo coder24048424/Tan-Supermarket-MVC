@@ -262,32 +262,41 @@ function OrdersModel() {
       const params = userId ? [orderId, userId] : [orderId];
 
       const sqlWithNotes = `
-        SELECT o.id, o.total, o.notes, o.status, o.shipping_status, o.created_at,
+        SELECT o.id, o.user_id, o.total, o.notes, o.status, o.shipping_status, o.created_at,
                oi.product_id, oi.price, oi.quantity,
-               p.productName
+               p.productName,
+               u.role AS owner_role,
+               u.username AS owner_username
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
         JOIN products p ON oi.product_id = p.id
+        LEFT JOIN users u ON o.user_id = u.id
         WHERE o.id = ? ${filterClause}
       `;
 
       const sqlLegacy = `
-        SELECT o.id, o.total, o.created_at,
+        SELECT o.id, o.user_id, o.total, o.created_at,
                oi.product_id, oi.price, oi.quantity,
-               p.productName
+               p.productName,
+               u.role AS owner_role,
+               u.username AS owner_username
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
         JOIN products p ON oi.product_id = p.id
+        LEFT JOIN users u ON o.user_id = u.id
         WHERE o.id = ? ${filterClause}
       `;
 
       const sqlNoNotesNoStatus = `
-        SELECT o.id, o.total, o.created_at,
+        SELECT o.id, o.user_id, o.total, o.created_at,
                oi.product_id, oi.price, oi.quantity,
-               p.productName
+               p.productName,
+               u.role AS owner_role,
+               u.username AS owner_username
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
         JOIN products p ON oi.product_id = p.id
+        LEFT JOIN users u ON o.user_id = u.id
         WHERE o.id = ? ${filterClause}
       `;
 
@@ -303,6 +312,9 @@ function OrdersModel() {
                 if (err2 || !rows2.length) return callback(err2 || null, rows2.length ? rows2 : null);
                 const order = {
                   id: rows2[0].id,
+                  user_id: rows2[0].user_id,
+                  owner_role: rows2[0].owner_role || null,
+                  owner_username: rows2[0].owner_username || null,
                   total: Number(rows2[0].total),
                   notes: '',
                   status: 'pending',
@@ -326,6 +338,9 @@ function OrdersModel() {
 
           const order = {
             id: rows[0].id,
+            user_id: rows[0].user_id,
+            owner_role: rows[0].owner_role || null,
+            owner_username: rows[0].owner_username || null,
             total: Number(rows[0].total),
             notes: useNotes ? (rows[0].notes || '') : '',
             status: rows[0].status || 'pending',

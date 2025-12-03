@@ -1,11 +1,10 @@
 const ProductModel = require('../models/ProductModel');
-const { matchesCategory, CATEGORY_NAMES } = require('../utils/catalog');
 
 const LOW_STOCK_THRESHOLD = 10;
 const STOCK_OPTIONS = [
   { value: 'all', label: 'All stock' },
   { value: 'in', label: 'In stock' },
-  { value: 'low', label: `Low stock (≤${LOW_STOCK_THRESHOLD})` },
+  { value: 'low', label: `Low stock (<= ${LOW_STOCK_THRESHOLD})` },
   { value: 'out', label: 'Out of stock' }
 ];
 const SORT_OPTIONS = [
@@ -15,26 +14,19 @@ const SORT_OPTIONS = [
   { value: 'stock-asc', label: 'Stock: Low to High' },
   { value: 'stock-desc', label: 'Stock: High to Low' }
 ];
-const CATEGORY_OPTIONS = [
-  { value: '', label: 'All categories' },
-  ...CATEGORY_NAMES.map((name) => ({ value: name, label: name }))
-];
-
 const parseFilters = (query = {}) => {
   const stockValues = new Set(STOCK_OPTIONS.map(opt => opt.value));
   const sortValues = new Set(SORT_OPTIONS.map(opt => opt.value));
-  const categoryValues = new Set(CATEGORY_NAMES);
   const searchTerm = (query.q ?? query.search ?? '').toString().trim();
   const stock = stockValues.has(query.stock) ? query.stock : 'all';
   const sort = sortValues.has(query.sort) ? query.sort : 'featured';
   const categoryInput = (query.category ?? '').toString().trim();
-  const category = categoryValues.has(categoryInput) ? categoryInput : null;
   return {
     search: searchTerm,
     stock,
     sort,
-    category,
-    hasActive: Boolean(searchTerm) || stock !== 'all' || sort !== 'featured' || Boolean(category)
+    category: categoryInput,
+    hasActive: Boolean(searchTerm) || stock !== 'all' || sort !== 'featured' || Boolean(categoryInput)
   };
 };
 
@@ -54,7 +46,8 @@ const applyFilters = (products = [], filters) => {
   }
 
   if (filters.category) {
-    filtered = filtered.filter(p => matchesCategory(p, filters.category));
+    const categoryLower = filters.category.toLowerCase();
+    filtered = filtered.filter(p => (p.category || '').toLowerCase() === categoryLower);
   }
 
   if (filters.sort === 'price-asc') {
@@ -100,14 +93,25 @@ function ProductController() {
           return res.status(500).json({ error: 'Failed to fetch products' });
         }
 
-        const filteredProducts = applyFilters(products, filters);
+        const categoryNames = Array.from(new Set(products.map(p => (p.category || '').trim()).filter(Boolean)));
+        const normalizedFilters = { ...filters };
+        if (normalizedFilters.category && !categoryNames.map(c => c.toLowerCase()).includes(normalizedFilters.category.toLowerCase())) {
+          normalizedFilters.category = null;
+          normalizedFilters.hasActive = Boolean(normalizedFilters.search) || normalizedFilters.stock !== 'all' || normalizedFilters.sort !== 'featured';
+        }
+
+        const filteredProducts = applyFilters(products, normalizedFilters);
         const stats = buildStats(products, filteredProducts);
         const basePayload = {
           products: filteredProducts,
           user: req.session.user,
-          filters,
+          filters: normalizedFilters,
           stats,
-          filterOptions: { stock: STOCK_OPTIONS, sort: SORT_OPTIONS, category: CATEGORY_OPTIONS },
+          filterOptions: {
+            stock: STOCK_OPTIONS,
+            sort: SORT_OPTIONS,
+            category: [{ value: '', label: 'All categories' }, ...categoryNames.map(name => ({ value: name, label: name }))]
+          },
           errors,
           success
         };
@@ -156,10 +160,10 @@ function ProductController() {
           }
 
           const others = allProducts.filter(p => p.id !== product.id);
-          const categoryValue = product.category || null;
+          const categoryValue = (product.category || '').toLowerCase() || null;
           const related = others
             .filter(p => {
-              const sameCategory = categoryValue ? matchesCategory(p, categoryValue) : false;
+              const sameCategory = categoryValue ? (p.category || '').toLowerCase() === categoryValue : false;
               const sameOrigin = p.origin && product.origin && p.origin === product.origin;
               return sameCategory || sameOrigin;
             })
@@ -178,7 +182,8 @@ function ProductController() {
         productName: req.body.productName,
         quantity: req.body.quantity,
         price: req.body.price,
-        image: req.file ? req.file.filename : req.body.image
+        image: req.file ? req.file.filename : req.body.image,
+        category: (req.body.category || '').trim() || null
       };
 
       if (!productData.productName) {
@@ -220,7 +225,7 @@ function ProductController() {
       if (Number.isNaN(id)) return res.status(400).send('Invalid product id');
 
       const productData = {};
-      ['productName', 'quantity', 'price'].forEach((f) => {
+      ['productName', 'quantity', 'price', 'category'].forEach((f) => {
         if (typeof req.body[f] !== 'undefined') productData[f] = req.body[f];
       });
       if (req.file) productData.image = req.file.filename;
