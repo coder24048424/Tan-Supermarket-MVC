@@ -1,21 +1,21 @@
 const db = require('../db');
 
+const ensureCategoryColumn = (callback) => {
+  const checkSql = "SHOW COLUMNS FROM products LIKE 'category'";
+  db.query(checkSql, (err, rows = []) => {
+    if (err) return callback(err);
+    if (rows.length) return callback(null);
+    const alterSql = "ALTER TABLE products ADD COLUMN category VARCHAR(100) NULL";
+    db.query(alterSql, callback);
+  });
+};
+
 function ProductModel() {
   return {
-    ensureCategoryColumn(callback) {
-      const checkSql = "SHOW COLUMNS FROM products LIKE 'category'";
-      db.query(checkSql, (err, rows = []) => {
-        if (err) return callback(err);
-        if (rows.length) return callback(null);
-        const alterSql = "ALTER TABLE products ADD COLUMN category VARCHAR(100) NULL";
-        db.query(alterSql, callback);
-      });
-    },
-
     // Get all products
     getAllProducts(callback) {
       const sql = 'SELECT id, productName, quantity, price, image, category FROM products';
-      this.ensureCategoryColumn((colErr) => {
+      ensureCategoryColumn((colErr) => {
         if (colErr) return callback(colErr);
         db.query(sql, (err, results) => {
           if (err) return callback(err);
@@ -27,7 +27,7 @@ function ProductModel() {
     // Get a product by ID
     getProductById(id, callback) {
       const sql = 'SELECT id, productName, quantity, price, image, category FROM products WHERE id = ? LIMIT 1';
-      this.ensureCategoryColumn((colErr) => {
+      ensureCategoryColumn((colErr) => {
         if (colErr) return callback(colErr);
         db.query(sql, [id], (err, results) => {
           if (err) return callback(err);
@@ -40,7 +40,7 @@ function ProductModel() {
       if (!Array.isArray(ids) || ids.length === 0) return callback(null, []);
       const placeholders = ids.map(() => '?').join(', ');
       const sql = `SELECT id, productName, quantity, price, image, category FROM products WHERE id IN (${placeholders})`;
-      this.ensureCategoryColumn((colErr) => {
+      ensureCategoryColumn((colErr) => {
         if (colErr) return callback(colErr);
         db.query(sql, ids, (err, results) => {
           if (err) return callback(err);
@@ -60,7 +60,7 @@ function ProductModel() {
         productData.image || null,
         productData.category || null
       ];
-      this.ensureCategoryColumn((colErr) => {
+      ensureCategoryColumn((colErr) => {
         if (colErr) return callback(colErr);
         db.query(sql, params, (err, result) => {
           if (err) return callback(err);
@@ -81,7 +81,7 @@ function ProductModel() {
       params.push(id);
 
       const sql = `UPDATE products SET ${setClauses} WHERE id = ?`;
-      this.ensureCategoryColumn((colErr) => {
+      ensureCategoryColumn((colErr) => {
         if (colErr) return callback(colErr);
         db.query(sql, params, (err, result) => {
           if (err) return callback(err);
@@ -96,6 +96,19 @@ function ProductModel() {
       db.query(sql, [id], (err, result) => {
         if (err) return callback(err);
         callback(null, { affectedRows: result.affectedRows });
+      });
+    },
+
+    // Get distinct categories
+    getCategories(callback) {
+      ensureCategoryColumn((colErr) => {
+        if (colErr) return callback(colErr);
+        const sql = 'SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category <> ""';
+        db.query(sql, (err, rows = []) => {
+          if (err) return callback(err);
+          const names = rows.map(r => r.category).filter(Boolean);
+          callback(null, names);
+        });
       });
     }
   };

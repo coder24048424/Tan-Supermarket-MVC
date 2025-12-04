@@ -71,6 +71,11 @@
             <option value="<%= option.value %>" <%= filters.sort === option.value ? 'selected' : '' %>><%= option.label %></option>
           <% }) %>
         </select>
+        <select name="category">
+          <% (filterOptions.category || []).forEach(option => { %>
+            <option value="<%= option.value %>" <%= filters.category === option.value ? 'selected' : '' %>><%= option.label %></option>
+          <% }) %>
+        </select>
       </div>
       <div class="toolbar-actions ms-auto">
         <button type="submit" class="btn btn-primary">Apply</button>

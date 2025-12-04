@@ -227,6 +227,35 @@ function UserController() {
       });
     },
 
+    // ADMIN: reactivate a deleted user (sets role to user)
+    adminActivateUser(req, res) {
+      const id = parseInt(req.params.id, 10);
+      if (Number.isNaN(id)) {
+        req.flash('error', 'Invalid user id');
+        return res.redirect('/admin/users');
+      }
+
+      UserModel.getStudentById(id, (err, found) => {
+        if (err || !found) {
+          req.flash('error', 'User not found');
+          return res.redirect('/admin/users');
+        }
+        if (String(found.role || '').toLowerCase() !== 'deleted') {
+          req.flash('error', 'Only deleted accounts can be reactivated.');
+          return res.redirect('/admin/users');
+        }
+        UserModel.updateStudent(id, { role: 'user' }, (updErr) => {
+          if (updErr) {
+            console.error(`Error activating user ${id}:`, updErr);
+            req.flash('error', 'Failed to activate user');
+            return res.redirect('/admin/users');
+          }
+          req.flash('success', 'User reactivated as regular user.');
+          return res.redirect('/admin/users');
+        });
+      });
+    },
+
     // ADMIN: view orders for a user
     adminUserOrders(req, res) {
       const userId = parseInt(req.params.id, 10);

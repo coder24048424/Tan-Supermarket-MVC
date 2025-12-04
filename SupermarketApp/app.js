@@ -357,7 +357,9 @@ app.get('/inventory', checkAuthenticated, checkAdmin, (req, res) =>
 );
 
 app.get('/addProduct', checkAuthenticated, checkAdmin, (req, res) => {
-    res.render('addProduct', { user: req.session.user });
+    ProductModel.getCategories((err, categories = []) => {
+        res.render('addProduct', { user: req.session.user, categories });
+    });
 });
 
 app.post('/addProduct', checkAuthenticated, checkAdmin, upload.single('image'), (req, res) =>
@@ -388,6 +390,9 @@ app.post('/admin/users/:id/edit', checkAuthenticated, checkAdmin, (req, res) =>
 );
 app.post('/admin/users/:id/delete', checkAuthenticated, checkAdmin, (req, res) =>
     UserController.adminDeleteUser(req, res)
+);
+app.post('/admin/users/:id/activate', checkAuthenticated, checkAdmin, (req, res) =>
+    UserController.adminActivateUser(req, res)
 );
 app.get('/admin/users/:id/orders', checkAuthenticated, checkAdmin, (req, res) =>
     UserController.adminUserOrders(req, res)

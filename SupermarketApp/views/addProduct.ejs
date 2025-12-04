@@ -25,7 +25,15 @@
     </div>
     <div>
       <label class="form-label" for="category">Category (optional)</label>
-      <input type="text" id="category" name="category" class="form-control" placeholder="e.g., Fresh Produce">
+      <input type="text" id="category" name="category" class="form-control" list="categoryOptions" placeholder="e.g., Fresh Produce">
+      <% if (categories && categories.length) { %>
+        <datalist id="categoryOptions">
+          <% categories.forEach(cat => { %>
+            <option value="<%= cat %>"></option>
+          <% }) %>
+        </datalist>
+      <% } %>
+      <p class="subtle-text mb-0 mt-1">Choose an existing category or type a new one.</p>
     </div>
     <div>
       <label class="form-label" for="image">Product image</label>

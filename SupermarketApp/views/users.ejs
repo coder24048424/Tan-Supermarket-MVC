@@ -39,18 +39,28 @@
         </thead>
         <tbody>
           <% users.forEach(u => { %>
+            <% const isDeleted = String(u.role || '').toLowerCase() === 'deleted'; %>
             <tr>
               <td><%= u.id %></td>
               <td><%= u.username %></td>
               <td><%= u.email %></td>
-              <td><span class="chip"><%= (u.role || '').toUpperCase() %></span></td>
+              <td>
+                <span class="chip <%= isDeleted ? 'danger' : '' %>"><%= (u.role || '').toUpperCase() %></span>
+                <% if (isDeleted) { %><span class="subtle-text ms-1">Read-only</span><% } %>
+              </td>
               <td><%= u.contact || '-' %></td>
               <td class="d-flex gap-2">
-                <a class="btn btn-secondary" href="/admin/users/<%= u.id %>/edit">Edit</a>
+                <% if (isDeleted) { %>
+                  <form action="/admin/users/<%= u.id %>/activate" method="POST" class="m-0">
+                    <button type="submit" class="btn btn-primary">Activate</button>
+                  </form>
+                <% } else { %>
+                  <a class="btn btn-secondary" href="/admin/users/<%= u.id %>/edit">Edit</a>
+                  <form action="/admin/users/<%= u.id %>/delete" method="POST" onsubmit="return confirm('Delete this user?');" class="m-0">
+                    <button type="submit" class="btn btn-link">Delete</button>
+                  </form>
+                <% } %>
                 <a class="btn btn-link" href="/admin/users/<%= u.id %>/orders">Orders</a>
-                <form action="/admin/users/<%= u.id %>/delete" method="POST" onsubmit="return confirm('Delete this user?');">
-                  <button type="submit" class="btn btn-link">Delete</button>
-                </form>
               </td>
             </tr>
           <% }) %>

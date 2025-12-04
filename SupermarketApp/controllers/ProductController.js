@@ -215,7 +215,15 @@ function ProductController() {
           req.flash('error', 'Product not found');
           return res.redirect('/inventory');
         }
-        return res.render('updateProduct', { product, user: req.session.user, errors: req.flash('error'), success: req.flash('success') });
+        return ProductModel.getCategories((catErr, categories = []) => {
+          return res.render('updateProduct', {
+            product,
+            user: req.session.user,
+            categories,
+            errors: req.flash('error'),
+            success: req.flash('success')
+          });
+        });
       });
     },
 

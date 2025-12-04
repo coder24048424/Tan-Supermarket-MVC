@@ -33,7 +33,15 @@
 
       <div>
         <label class="form-label" for="category">Category (optional)</label>
-        <input type="text" class="form-control" id="category" name="category" value="<%= product.category || '' %>" placeholder="e.g., Fresh Produce">
+        <input type="text" class="form-control" id="category" name="category" value="<%= product.category || '' %>" placeholder="e.g., Fresh Produce" list="categoryOptions">
+        <% if (categories && categories.length) { %>
+          <datalist id="categoryOptions">
+            <% categories.forEach(cat => { %>
+              <option value="<%= cat %>"></option>
+            <% }) %>
+          </datalist>
+        <% } %>
+        <p class="subtle-text mb-0 mt-1">Choose an existing category or type a new one.</p>
       </div>
 
       <div class="glass-panel">
