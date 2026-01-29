@@ -85,6 +85,9 @@ CREATE TABLE `orders` (
   `user_id` int NOT NULL,
   `total` double(10,2) NOT NULL,
   `notes` text COLLATE utf8mb4_general_ci,
+  `status` varchar(32) COLLATE utf8mb4_general_ci DEFAULT 'pending',
+  `shipping_status` varchar(32) COLLATE utf8mb4_general_ci DEFAULT 'processing',
+  `payment_method` varchar(32) COLLATE utf8mb4_general_ci DEFAULT 'unpaid',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `fk_orders_user` (`user_id`),
@@ -92,17 +95,38 @@ CREATE TABLE `orders` (
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+
 --
 -- Dumping data for table `orders`
 --
 
 LOCK TABLES `orders` WRITE;
 /*!40000 ALTER TABLE `orders` DISABLE KEYS */;
-INSERT INTO `orders` VALUES
+INSERT INTO `orders` (`id`, `user_id`, `total`, `notes`, `created_at`) VALUES
 (1,2,13.00,'Leave at the concierge desk.','2025-11-18 11:05:00'),
 (2,3,9.40,'Ring upon arrival.','2025-11-19 09:15:00');
 /*!40000 ALTER TABLE `orders` ENABLE KEYS */;
 UNLOCK TABLES;
+
+--
+-- Table structure for table `transactions`
+--
+
+DROP TABLE IF EXISTS `transactions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `transactions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `orderId` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `payerId` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `payerEmail` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `currency` varchar(8) COLLATE utf8mb4_general_ci NOT NULL,
+  `status` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `time` datetime NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `order_items`

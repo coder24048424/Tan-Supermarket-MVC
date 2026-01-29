@@ -56,6 +56,8 @@
         <% const refundStatus = order.refundStatus || 'none'; %>
         <% const orderStatus = (order.status || 'pending').toLowerCase(); %>
         <% const shippingStatus = (order.shipping_status || 'processing').toLowerCase(); %>
+        <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
+        <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
         <div class="inventory-card">
           <div class="d-flex justify-content-between align-items-start">
             <div>
@@ -66,6 +68,10 @@
                 <span class="status-pill <%= orderStatus === 'pending' ? 'warning' : 'success' %>"><%= orderStatus %></span>
                 Shipping:
                 <span class="status-pill"><%= shippingStatus %></span>
+              </p>
+              <p class="subtle-text mb-1">
+                Payment:
+                <span class="status-pill"><%= paymentLabel %></span>
               </p>
             </div>
             <div class="d-flex gap-2 align-items-center">

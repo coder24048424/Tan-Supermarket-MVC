@@ -99,6 +99,15 @@ function OrdersController() {
 
         const total = enriched.reduce((sum, it) => sum + ((parseFloat(it.price) || 0) * it.quantity), 0);
 
+        req.session.pendingCheckout = {
+          cart: enriched,
+          total,
+          firstName,
+          address,
+          phone,
+          notes: notesInput
+        };
+
         return res.render('confirmOrder', {
           cart: enriched,
           total,
@@ -201,7 +210,7 @@ function OrdersController() {
 
         const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-        OrdersModel.createOrder(user.id, normalizedItems, total, notes, 'pending', (orderErr, data = {}) => {
+        OrdersModel.createOrder(user.id, normalizedItems, total, notes, 'pending', 'unpaid', (orderErr, data = {}) => {
           if (orderErr) {
             console.error('Order creation failed:', orderErr);
             if (orderErr.code === 'INSUFFICIENT_STOCK') {
@@ -213,6 +222,7 @@ function OrdersController() {
           }
 
           req.session.cart = []; // Clear cart
+          req.session.pendingCheckout = null;
           UserCartModel.clearCart(user.id, (clearErr) => {
             if (clearErr) console.error('Failed to clear persisted cart:', clearErr);
           });
@@ -279,6 +289,8 @@ function OrdersController() {
     getOrderById(req, res) {
       const sessionUser = req.session.user;
       const orderId = parseInt(req.params.id, 10);
+      const success = req.flash('success');
+      const errors = req.flash('error');
 
       if (Number.isNaN(orderId)) {
         req.flash('error', 'Invalid order');
@@ -293,7 +305,9 @@ function OrdersController() {
           order,
           user: sessionUser,
           refunds,
-          ownerDeleted
+          ownerDeleted,
+          success,
+          errors
         });
       };
 

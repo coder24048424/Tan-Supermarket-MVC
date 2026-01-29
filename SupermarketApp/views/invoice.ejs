@@ -26,6 +26,12 @@
       <span class="summary-total">$<%= order.total.toFixed(2) %></span>
     </div>
     <div class="summary-row">
+      <span>Payment</span>
+      <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
+      <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
+      <span><%= paymentLabel %></span>
+    </div>
+    <div class="summary-row">
       <span>Status</span>
       <span><%= (order.status || 'delivered').toUpperCase() %></span>
     </div>

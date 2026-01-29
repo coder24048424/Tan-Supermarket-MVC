@@ -8,9 +8,13 @@ const ProductController = require('./controllers/ProductController');
 const UserController = require('./controllers/UserController');
 const OrdersController = require('./controllers/OrdersController');
 const RefundController = require('./controllers/RefundController');
+const PaymentController = require('./controllers/PaymentController');
 const AdminDashboardController = require('./controllers/AdminDashboardController');
 const HomeController = require('./controllers/HomeController');
 const CartController = require('./controllers/CartController');
+const NetsService = require('./services/net');
+const OrderService = require('./services/OrderService');
+const OrdersModel = require('./models/OrdersModel');
 const ProductModel = require('./models/ProductModel');
 const UserModel = require('./models/UserModel');
 const RefundModel = require('./models/RefundModel');
@@ -37,6 +41,7 @@ const upload = multer({ storage });
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 
 app.use(session({
     secret: 'secret',
@@ -417,6 +422,206 @@ app.post('/checkout/confirm', checkAuthenticated, checkCustomer, (req, res) =>
     OrdersController.checkoutConfirm(req, res)
 );
 
+// Prepare payment
+app.post('/checkout/payment', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.preparePayment(req, res)
+);
+
+// Payment page
+app.get('/payment', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.paymentPage(req, res)
+);
+
+// Payment method selection
+app.post('/payment/method', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.setPaymentMethod(req, res)
+);
+
+// NETS QR payment
+app.post('/nets-qr', checkAuthenticated, checkCustomer, (req, res) => {
+    const pending = req.session.pendingCheckout;
+    if (!pending || !pending.cart || !pending.cart.length) {
+        req.flash('error', 'No pending checkout found.');
+        return res.redirect('/checkout');
+    }
+
+    pending.paymentMethod = 'nets';
+    req.session.pendingCheckout = pending;
+
+    return res.redirect('/payment?autoNets=1');
+});
+
+app.post('/nets-qr/request', checkAuthenticated, checkCustomer, async (req, res) => {
+    try {
+        const pending = req.session.pendingCheckout;
+        if (!pending || !pending.cart || !pending.cart.length) {
+            return res.status(400).json({ success: false, error: 'No pending checkout found.' });
+        }
+
+        pending.paymentMethod = 'nets';
+        req.session.pendingCheckout = pending;
+
+        const cartTotal = Number(pending.total || 0).toFixed(2);
+        const payload = await NetsService.generateQrData(cartTotal);
+        if (!payload || !payload.success) {
+            return res.status(400).json(payload || { success: false, error: 'Unable to generate NETS QR.' });
+        }
+
+        pending.netsTxnRetrievalRef = payload.txnRetrievalRef;
+        req.session.pendingCheckout = pending;
+
+        return res.json(payload);
+    } catch (err) {
+        console.error('NETS QR request failed:', err);
+        return res.status(500).json({ success: false, error: 'Unable to generate NETS QR.' });
+    }
+});
+
+// NETS QR payment status (SSE)
+app.get('/sse/payment-status/:txnRetrievalRef', checkAuthenticated, checkCustomer, async (req, res) => {
+    res.set({
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+    });
+
+    const txnRetrievalRef = req.params.txnRetrievalRef;
+    let pollCount = 0;
+    const maxPolls = 60;
+    let frontendTimeoutStatus = 0;
+
+    const interval = setInterval(async () => {
+        pollCount += 1;
+
+        try {
+            const response = await NetsService.queryNetsQrStatus(txnRetrievalRef, frontendTimeoutStatus);
+            res.write(`data: ${JSON.stringify(response.data)}\n\n`);
+
+            const resData = response.data && response.data.result && response.data.result.data;
+
+            if (resData && resData.response_code === '00' && resData.txn_status === 1) {
+                res.write(`data: ${JSON.stringify({ success: true })}\n\n`);
+                clearInterval(interval);
+                res.end();
+            } else if (
+                frontendTimeoutStatus === 1 &&
+                resData &&
+                (resData.response_code !== '00' || resData.txn_status === 2)
+            ) {
+                res.write(`data: ${JSON.stringify({ fail: true, ...resData })}\n\n`);
+                clearInterval(interval);
+                res.end();
+            }
+        } catch (err) {
+            clearInterval(interval);
+            res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+            res.end();
+        }
+
+        if (pollCount >= maxPolls) {
+            clearInterval(interval);
+            frontendTimeoutStatus = 1;
+            res.write(`data: ${JSON.stringify({ fail: true, error: 'Timeout' })}\n\n`);
+            res.end();
+        }
+    }, 5000);
+
+    req.on('close', () => {
+        clearInterval(interval);
+    });
+});
+
+// NETS QR success handler
+app.get('/nets-qr/success', checkAuthenticated, checkCustomer, async (req, res) => {
+    const user = req.session.user;
+    const pending = req.session.pendingCheckout;
+    const txnRetrievalRef = String(req.query.txn_retrieval_ref || '').trim();
+    const existing = req.session.netsPayment || {};
+
+    if (existing.orderId && (!txnRetrievalRef || existing.txnRetrievalRef === txnRetrievalRef)) {
+        OrdersModel.updatePaymentMethod(existing.orderId, 'nets', (updateErr) => {
+            if (updateErr) {
+                console.error('Failed to update payment method:', updateErr);
+            }
+        });
+        req.flash('success', 'Payment successful. Thank you for your payment!');
+        return res.redirect(`/orders/${existing.orderId}`);
+    }
+
+    if (!pending || !pending.cart || !pending.cart.length) {
+        req.flash('error', 'No pending checkout found.');
+        return res.redirect('/payment');
+    }
+
+    if (txnRetrievalRef && pending.netsTxnRetrievalRef && pending.netsTxnRetrievalRef !== txnRetrievalRef) {
+        req.flash('error', 'NETS transaction does not match this checkout.');
+        return res.redirect('/payment');
+    }
+
+    try {
+        const orderResult = await OrderService.placeOrderFromPending(user, pending, 'nets');
+        req.session.cart = [];
+        req.session.pendingCheckout = null;
+        req.session.netsPayment = { txnRetrievalRef: txnRetrievalRef || pending.netsTxnRetrievalRef || '', orderId: orderResult.orderId };
+
+        UserCartModel.clearCart(user.id, (clearErr) => {
+            if (clearErr) console.error('Failed to clear persisted cart:', clearErr);
+        });
+
+        OrdersModel.updatePaymentMethod(orderResult.orderId, 'nets', (updateErr) => {
+            if (updateErr) {
+                console.error('Failed to update payment method:', updateErr);
+            }
+        });
+        req.flash('success', 'Payment successful. Thank you for your payment!');
+        return res.redirect(`/orders/${orderResult.orderId}`);
+    } catch (err) {
+        console.error('Failed to finalize NETS payment:', err);
+        req.flash('error', err.message || 'Unable to finalize NETS payment.');
+        return res.redirect('/payment');
+    }
+});
+
+app.get('/nets-qr/fail', checkAuthenticated, checkCustomer, (req, res) =>
+    res.render('netsQrFail', {
+        title: 'Error',
+        responseCode: 'N.A.',
+        instructions: '',
+        errorMsg: 'Unable to generate NETS QR code.'
+    })
+);
+
+app.get('/nets-qr/cancel', checkAuthenticated, checkCustomer, (req, res) =>
+    res.render('netsQrCancel', (() => {
+        const pending = req.session.pendingCheckout || {};
+        const method = String(pending.paymentMethod || '').toLowerCase();
+        const methodLabel = method === 'paypal'
+            ? 'PayPal'
+            : method === 'card'
+                ? 'Card'
+                : method === 'paynow'
+                    ? 'PayNow'
+                    : method === 'nets'
+                        ? 'NETS QR'
+                        : 'Unknown';
+
+        return {
+            title: 'Payment Cancelled',
+            cancelledMethod: methodLabel,
+            cancelledMethodKey: method,
+            total: Number(pending.total || 0).toFixed(2)
+        };
+    })())
+);
+
+// PayPal checkout
+app.post('/paypal/create-order', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.createPayPalOrder(req, res)
+);
+app.post('/paypal/capture-order', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.capturePayPalOrder(req, res)
+);
+
 // Place order
 app.post('/checkout', checkAuthenticated, checkCustomer, (req, res) =>
     OrdersController.placeOrder(req, res)
@@ -426,6 +631,7 @@ app.post('/checkout', checkAuthenticated, checkCustomer, (req, res) =>
 app.get('/orders', checkAuthenticated, (req, res) =>
     OrdersController.viewOrders(req, res)
 );
+
 
 // Order details
 app.get('/orders/:id', checkAuthenticated, (req, res) =>

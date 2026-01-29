@@ -37,6 +37,7 @@
             <th>ID</th>
             <th>Date</th>
             <th>Status</th>
+            <th>Payment</th>
             <th>Refund</th>
             <th>Total</th>
             <th>Items</th>
@@ -47,10 +48,13 @@
         <tbody>
           <% orders.forEach(order => { %>
             <% const refundStatus = order.refundStatus || 'none'; %>
+            <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
+            <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
             <tr>
               <td>#<%= order.id %></td>
               <td><%= order.created_at ? new Date(order.created_at).toLocaleString() : '' %></td>
               <td><%= (order.status || 'pending').toUpperCase() %></td>
+              <td><%= paymentLabel %></td>
               <td>
                 <% if (refundStatus === 'refunded') { %>
                   <span class="status-pill danger">Refunded</span>

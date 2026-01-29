@@ -1,0 +1,24 @@
+<%- include('partials/head', { pageTitle: title || 'Payment Error', bodyClass: 'page-checkout' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">NETS QR payment failed</h2>
+      <p class="subtle-text mb-0">We could not generate a NETS QR code.</p>
+    </div>
+    <a class="btn btn-secondary" href="/payment">Back to payment</a>
+  </div>
+
+  <div class="summary-card">
+    <div class="toast error mb-2"><%= errorMsg || 'Payment failed.' %></div>
+    <div class="summary-row">
+      <span>Response code</span>
+      <span><%= responseCode || 'N.A.' %></span>
+    </div>
+    <% if (instructions) { %>
+      <div class="subtle-text mt-2"><%= instructions %></div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

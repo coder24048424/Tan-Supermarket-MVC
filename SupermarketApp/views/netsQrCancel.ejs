@@ -1,0 +1,52 @@
+<%- include('partials/head', { pageTitle: title || 'Payment Cancelled', bodyClass: 'page-checkout' }) %>
+
+<section class="glass-panel">
+  <div class="text-center mb-3">
+    <h2 class="section-title mb-1">Order transaction not successful</h2>
+    <p class="subtle-text mb-2">You cancelled the payment.</p>
+    <p class="subtle-text mb-2">Cancelled payment method: <strong><%= cancelledMethod || 'Unknown' %></strong></p>
+    <a class="btn btn-secondary" href="/payment">Back to payment</a>
+  </div>
+
+  <div class="summary-card text-center">
+    <div class="toast error mb-2">Payment was cancelled before completion.</div>
+    <div class="subtle-text">If this was a mistake, please try again.</div>
+  </div>
+
+  <div class="summary-card mt-3">
+    <h4 class="text-center">Choose another payment method</h4>
+    <div class="payment-methods mt-2">
+      <% const cancelledKey = String(cancelledMethodKey || '').toLowerCase(); %>
+      <% if (cancelledKey !== 'nets') { %>
+        <button type="button" class="payment-method-btn nets" data-method="nets">NETS QR</button>
+      <% } %>
+      <% if (cancelledKey !== 'paynow') { %>
+        <button type="button" class="payment-method-btn paynow" data-method="paynow" disabled>
+          PayNow (coming soon)
+        </button>
+      <% } %>
+      <% if (cancelledKey !== 'paypal') { %>
+        <button type="button" class="payment-method-btn paypal" data-method="paypal">PayPal</button>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<script>
+  const methodButtons = document.querySelectorAll('[data-method]');
+  methodButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const method = btn.getAttribute('data-method');
+      if (!method) return;
+      fetch('/payment/method', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method })
+      }).finally(() => {
+        window.location.href = '/payment';
+      });
+    });
+  });
+</script>
+
+<%- include('partials/footer') %>

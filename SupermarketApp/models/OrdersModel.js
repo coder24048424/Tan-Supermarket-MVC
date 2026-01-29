@@ -13,22 +13,62 @@ function OrdersModel() {
 
     ensureColumn('status', "ALTER TABLE orders ADD COLUMN status VARCHAR(32) DEFAULT 'pending'", (err) => {
       if (err) return callback(err);
-      ensureColumn('shipping_status', "ALTER TABLE orders ADD COLUMN shipping_status VARCHAR(32) DEFAULT 'processing'", callback);
+      ensureColumn('shipping_status', "ALTER TABLE orders ADD COLUMN shipping_status VARCHAR(32) DEFAULT 'processing'", (shipErr) => {
+        if (shipErr) return callback(shipErr);
+        ensureColumn('payment_method', "ALTER TABLE orders ADD COLUMN payment_method VARCHAR(32) DEFAULT 'unpaid'", callback);
+      });
     });
   };
 
   const ensureStatusColumns = (callback) => ensureOrderSchema(callback);
 
+  const attachPaymentMethods = (ordersById, callback) => {
+    const ids = Object.keys(ordersById || {}).map(id => Number(id)).filter(Boolean);
+    if (!ids.length) return callback(null);
+
+    const missing = ids.filter(id => {
+      const order = ordersById[id];
+      if (!order) return true;
+      const method = String(order.payment_method || '').toLowerCase();
+      return !method || method === 'unpaid';
+    });
+    if (!missing.length) return callback(null);
+
+    const checkSql = 'SHOW COLUMNS FROM orders LIKE ?';
+    db.query(checkSql, ['payment_method'], (checkErr, cols = []) => {
+      if (checkErr || !cols.length) return callback(null);
+      const sql = 'SELECT id, payment_method FROM orders WHERE id IN (?)';
+      db.query(sql, [missing], (qErr, rows = []) => {
+        if (qErr) return callback(null);
+        rows.forEach((row) => {
+          if (ordersById[row.id]) {
+            ordersById[row.id].payment_method = row.payment_method || 'unpaid';
+          }
+        });
+        return callback(null);
+      });
+    });
+  };
+
   return {
 
-    createOrder(userId, items, total, notes, status = 'pending', callback) {
+    createOrder(userId, items, total, notes, status = 'pending', paymentMethod = 'unpaid', callback) {
+      if (typeof paymentMethod === 'function') {
+        callback = paymentMethod;
+        paymentMethod = 'unpaid';
+      }
+      if (typeof status === 'function') {
+        callback = status;
+        status = 'pending';
+        paymentMethod = 'unpaid';
+      }
       if (!Array.isArray(items) || items.length === 0) {
         return callback(new Error('No items provided for order'));
       }
 
       const orderSqlWithNotes = `
-        INSERT INTO orders (user_id, total, notes, status, shipping_status, created_at)
-        VALUES (?, ?, ?, ?, ?, NOW())
+        INSERT INTO orders (user_id, total, notes, status, shipping_status, payment_method, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW())
       `;
 
       const orderSqlLegacy = `
@@ -42,7 +82,7 @@ function OrdersModel() {
 
           const insertOrder = (useNotes) => {
             const sql = useNotes ? orderSqlWithNotes : orderSqlLegacy;
-            const params = useNotes ? [userId, total, notes, status, 'processing'] : [userId, total];
+            const params = useNotes ? [userId, total, notes, status, 'processing', paymentMethod] : [userId, total];
 
             db.query(sql, params, (err, result) => {
               if (err) {
@@ -114,7 +154,7 @@ function OrdersModel() {
 
     getOrdersByUser(userId, callback) {
       const sqlWithNotes = `
-        SELECT o.id, o.total, o.notes, o.status, o.shipping_status, o.created_at,
+        SELECT o.id, o.total, o.notes, o.status, o.shipping_status, o.payment_method, o.created_at,
                oi.product_id, oi.price, oi.quantity,
                p.productName
         FROM orders o
@@ -165,6 +205,7 @@ function OrdersModel() {
                       notes: '',
                       status: 'delivered',
                       created_at: r.created_at,
+                      payment_method: r.payment_method || 'unpaid',
                       items: []
                     };
                   }
@@ -192,6 +233,7 @@ function OrdersModel() {
                   status: r.status || 'pending',
                   shipping_status: r.shipping_status || 'processing',
                   created_at: r.created_at,
+                  payment_method: r.payment_method || 'unpaid',
                   items: []
                 };
             }
@@ -204,7 +246,7 @@ function OrdersModel() {
             });
           });
 
-          callback(null, Object.values(orders));
+          return attachPaymentMethods(orders, () => callback(null, Object.values(orders)));
         });
       };
 
@@ -213,7 +255,7 @@ function OrdersModel() {
 
     getAllOrders(callback) {
       const sqlWithNotes = `
-        SELECT o.id, o.user_id, o.total, o.status, o.shipping_status, o.created_at,
+        SELECT o.id, o.user_id, o.total, o.status, o.shipping_status, o.payment_method, o.created_at,
                oi.product_id, oi.price, oi.quantity,
                p.productName,
                u.username, u.email
@@ -240,6 +282,7 @@ function OrdersModel() {
               status: r.status || 'pending',
               shipping_status: r.shipping_status || 'processing',
               created_at: r.created_at,
+              payment_method: r.payment_method || 'unpaid',
               items: []
             };
           }
@@ -252,8 +295,10 @@ function OrdersModel() {
           });
         });
 
-        const sorted = Object.values(orders).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        return callback(null, sorted);
+        return attachPaymentMethods(orders, () => {
+          const sorted = Object.values(orders).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          return callback(null, sorted);
+        });
       });
     },
 
@@ -262,7 +307,7 @@ function OrdersModel() {
       const params = userId ? [orderId, userId] : [orderId];
 
       const sqlWithNotes = `
-        SELECT o.id, o.user_id, o.total, o.notes, o.status, o.shipping_status, o.created_at,
+        SELECT o.id, o.user_id, o.total, o.notes, o.status, o.shipping_status, o.payment_method, o.created_at,
                oi.product_id, oi.price, oi.quantity,
                p.productName,
                u.role AS owner_role,
@@ -319,6 +364,7 @@ function OrdersModel() {
                   notes: '',
                   status: 'pending',
                   created_at: rows2[0].created_at,
+                  payment_method: rows2[0].payment_method || 'unpaid',
                   items: []
                 };
                 rows2.forEach((r) => {
@@ -346,6 +392,7 @@ function OrdersModel() {
             status: rows[0].status || 'pending',
             shipping_status: rows[0].shipping_status || 'processing',
             created_at: rows[0].created_at,
+            payment_method: rows[0].payment_method || 'unpaid',
             items: []
           };
 
@@ -358,7 +405,8 @@ function OrdersModel() {
             });
           });
 
-          callback(null, order);
+          const map = { [order.id]: order };
+          return attachPaymentMethods(map, () => callback(null, order));
         });
       };
 
@@ -381,6 +429,17 @@ function OrdersModel() {
         if (err) return callback(err);
         const sql = 'UPDATE orders SET shipping_status = ? WHERE id = ?';
         db.query(sql, [shippingStatus, orderId], (qErr, result) => {
+          if (qErr) return callback(qErr);
+          callback(null, { affectedRows: result.affectedRows });
+        });
+      });
+    },
+
+    updatePaymentMethod(orderId, paymentMethod, callback) {
+      ensureStatusColumns((err) => {
+        if (err) return callback(err);
+        const sql = 'UPDATE orders SET payment_method = ? WHERE id = ?';
+        db.query(sql, [paymentMethod, orderId], (qErr, result) => {
           if (qErr) return callback(qErr);
           callback(null, { affectedRows: result.affectedRows });
         });

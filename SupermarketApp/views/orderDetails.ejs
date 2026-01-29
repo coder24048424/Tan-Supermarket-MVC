@@ -18,12 +18,25 @@
     </div>
   </div>
 
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
   <div class="split-layout">
     <div class="summary-card">
       <% const hasRefundApproved = Array.isArray(refunds) && refunds.some(r => {
         const s = String(r.status || '').toLowerCase();
         return s === 'approved' || s === 'processed';
       }); %>
+      <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
+      <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
       <h4>Total Paid</h4>
       <p class="summary-total">$<%= order.total.toFixed(2) %></p>
       <div class="summary-row">
@@ -31,6 +44,10 @@
         <% const status = (order.status || 'delivered').toLowerCase(); %>
         <% const statusClass = status === 'pending' ? 'warning' : 'success'; %>
         <span class="status-pill <%= statusClass %>"><%= status === 'pending' ? 'Pending' : 'Delivered' %></span>
+      </div>
+      <div class="summary-row">
+        <span>Payment</span>
+        <span class="status-pill"><%= paymentLabel %></span>
       </div>
       <% if (hasRefundApproved) { %>
         <div class="summary-row">

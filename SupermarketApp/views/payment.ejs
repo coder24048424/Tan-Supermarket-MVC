@@ -1,0 +1,289 @@
+<%- include('partials/head', { pageTitle: 'Payment', bodyClass: 'page-checkout' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Choose your payment method</h2>
+      <p class="subtle-text mb-0">Complete payment to finalize your order.</p>
+    </div>
+    <a class="btn btn-secondary" href="/checkout">Back to checkout</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <div class="split-layout">
+    <div class="summary-card" id="payment-panel">
+      <h4>Payment options</h4>
+      <div class="payment-methods">
+        <button type="button" class="payment-method-btn nets" id="nets-qr-button">
+          NETS QR
+        </button>
+        <button type="button" class="payment-method-btn paynow" disabled>
+          PayNow (coming soon)
+        </button>
+      </div>
+
+      <div class="summary-card mt-3 nets-qr-panel" id="nets-qr-panel" hidden>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="paypal-label m-0">NETS QR code</div>
+          <button type="button" class="btn btn-secondary btn-sm" id="nets-qr-cancel">Cancel</button>
+        </div>
+        <div id="nets-qr-status" class="subtle-text mb-2">Click NETS QR to generate a code.</div>
+        <div class="d-flex justify-content-center">
+          <img id="nets-qr-image" alt="NETS QR code" />
+        </div>
+        <div class="subtle-text">Time remaining: <span id="nets-qr-timer">0:00</span></div>
+      </div>
+
+      <div class="paypal-label">PayPal</div>
+      <div id="paypal-status" class="subtle-text mt-2"></div>
+      <% if (paypalClientId) { %>
+        <div id="paypal-button-container" class="mt-2"></div>
+      <% } else { %>
+        <div class="toast error mt-2">Missing PayPal client ID in .env</div>
+      <% } %>
+    </div>
+
+    <div>
+      <div class="summary-card">
+        <h4>Order summary</h4>
+        <div class="summary-row">
+          <span>Items</span>
+          <span><%= pending.cart.length %></span>
+        </div>
+        <div class="summary-row">
+          <span>Total</span>
+          <span class="summary-total">$<%= Number(pending.total || 0).toFixed(2) %></span>
+        </div>
+      </div>
+
+      <table class="table-modern mt-3">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% pending.cart.forEach(item => { %>
+            <tr>
+              <td><strong><%= item.productName %></strong></td>
+              <td><%= item.quantity %></td>
+              <td>$<%= Number(item.price || 0).toFixed(2) %></td>
+              <td>$<%= (Number(item.price || 0) * item.quantity).toFixed(2) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<script src="https://unpkg.com/event-source-polyfill"></script>
+<% if (paypalClientId) { %>
+  <script src="https://www.paypal.com/sdk/js?client-id=<%= paypalClientId %>&currency=SGD"></script>
+  <script>
+    const statusEl = document.getElementById('paypal-status');
+    const paypalContainer = document.getElementById('paypal-button-container');
+    const setStatus = (message, isError) => {
+      statusEl.textContent = message;
+      statusEl.className = isError ? 'subtle-text text-danger mt-2' : 'subtle-text mt-2';
+    };
+
+    const persistMethod = (method) => {
+      return fetch('/payment/method', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method })
+      }).then(res => res.json());
+    };
+
+    const paypalButtons = paypal.Buttons({
+      createOrder: () => {
+        return persistMethod('paypal').then((saved) => {
+          if (!saved || !saved.success) {
+            throw new Error(saved && saved.error ? saved.error : 'Unable to save payment method.');
+          }
+          return fetch('/paypal/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          }).then(res => res.json()).then(data => {
+            if (!data || !data.id) {
+              throw new Error(data && data.error ? data.error : 'Unable to create PayPal order.');
+            }
+            return data.id;
+          });
+        });
+      },
+      onApprove: (data) => {
+        setStatus('Processing payment...');
+        return fetch('/paypal/capture-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: data.orderID })
+        }).then(res => res.json()).then(payload => {
+          if (!payload || !payload.success) {
+            throw new Error(payload && payload.error ? payload.error : 'Payment failed.');
+          }
+          window.location.href = `/orders/${payload.orderId}`;
+        });
+      },
+      onError: () => {
+        setStatus('PayPal error. Please try again.', true);
+      }
+    });
+
+    if (paypalContainer) {
+      paypalButtons.render('#paypal-button-container');
+    }
+  </script>
+<% } %>
+
+<script>
+  const netsButton = document.getElementById('nets-qr-button');
+  const netsPanel = document.getElementById('nets-qr-panel');
+  const netsStatus = document.getElementById('nets-qr-status');
+  const netsImage = document.getElementById('nets-qr-image');
+  const netsTimer = document.getElementById('nets-qr-timer');
+  const netsCancel = document.getElementById('nets-qr-cancel');
+  let netsTimerInterval = null;
+  let netsEventSource = null;
+  let netsTxnRef = null;
+  let netsRequestInFlight = false;
+
+  const setNetsStatus = (message, isError) => {
+    if (!netsStatus) return;
+    netsStatus.textContent = message;
+    netsStatus.className = isError ? 'subtle-text text-danger mb-2' : 'subtle-text mb-2';
+  };
+
+  const clearNetsTimer = () => {
+    if (netsTimerInterval) {
+      clearInterval(netsTimerInterval);
+      netsTimerInterval = null;
+    }
+  };
+
+  const closeNetsSse = () => {
+    if (netsEventSource) {
+      netsEventSource.close();
+      netsEventSource = null;
+    }
+  };
+
+  const startNetsSse = (txnRetrievalRef) => {
+    if (!txnRetrievalRef || typeof EventSourcePolyfill === 'undefined') return;
+    closeNetsSse();
+    netsTxnRef = txnRetrievalRef;
+    const url = `/sse/payment-status/${txnRetrievalRef}`;
+    netsEventSource = new EventSourcePolyfill(url, { heartbeatTimeout: 150000 });
+
+    netsEventSource.addEventListener('message', (event) => {
+      let payload;
+      try {
+        payload = JSON.parse(event.data);
+      } catch (err) {
+        return;
+      }
+
+      if (payload && payload.success) {
+        closeNetsSse();
+        window.location.href = `/nets-qr/success?txn_retrieval_ref=${txnRetrievalRef}`;
+      } else if (payload && payload.fail) {
+        closeNetsSse();
+        setNetsStatus('NETS payment failed. Please try again.', true);
+      } else if (payload && payload.error) {
+        setNetsStatus('NETS status error. Please try again.', true);
+      }
+    });
+  };
+
+  const startNetsTimer = (seconds) => {
+    clearNetsTimer();
+    let remaining = Number(seconds || 0);
+    const tick = () => {
+      const minutes = Math.floor(remaining / 60);
+      const secs = remaining % 60;
+      if (netsTimer) {
+        netsTimer.textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
+      }
+      remaining = Math.max(0, remaining - 1);
+      if (remaining <= 0) {
+        clearNetsTimer();
+        closeNetsSse();
+        setNetsStatus('Transaction timed out. Please try again.', true);
+      }
+    };
+    tick();
+    netsTimerInterval = setInterval(tick, 1000);
+  };
+
+  const showNetsPanel = () => {
+    if (netsPanel) netsPanel.hidden = false;
+  };
+
+  const requestNetsQr = () => {
+    if (netsRequestInFlight) return;
+    netsRequestInFlight = true;
+    showNetsPanel();
+    setNetsStatus('Generating NETS QR code...');
+
+    fetch('/payment/method', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method: 'nets' })
+    }).then(() => {
+      return fetch('/nets-qr/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }).then(res => res.json()).then((data) => {
+      if (!data || !data.success) {
+        setNetsStatus(data && (data.errorMsg || data.error) ? (data.errorMsg || data.error) : 'Unable to generate NETS QR.', true);
+        return;
+      }
+
+      if (netsImage) netsImage.src = data.qrCodeUrl;
+      startNetsTimer(data.timer || 300);
+      startNetsSse(data.txnRetrievalRef);
+      setNetsStatus('Scan with your bank simulator app to complete payment.');
+    }).catch(() => {
+      setNetsStatus('Unable to generate NETS QR. Please try again.', true);
+    }).finally(() => {
+      netsRequestInFlight = false;
+    });
+  };
+
+  if (netsCancel) {
+    netsCancel.addEventListener('click', () => {
+      closeNetsSse();
+      clearNetsTimer();
+      if (netsPanel) netsPanel.hidden = true;
+      setNetsStatus('NETS QR cancelled. Choose another payment method.');
+    });
+  }
+
+  if (netsButton) {
+    netsButton.addEventListener('click', () => {
+      requestNetsQr();
+    });
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('autoNets') === '1') {
+    requestNetsQr();
+  }
+</script>
+
+<%- include('partials/footer') %>

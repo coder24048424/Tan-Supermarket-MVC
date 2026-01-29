@@ -20,15 +20,19 @@
           <th>Order ID</th>
           <th>Date</th>
           <th>Total</th>
+          <th>Payment</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         <% orders.forEach(order => { %>
+          <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
+          <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
           <tr>
             <td>#<%= order.id %></td>
             <td><%= order.created_at.toLocaleString() %></td>
             <td>$<%= order.total.toFixed(2) %></td>
+            <td><%= paymentLabel %></td>
             <td><a class="btn btn-link" href="/orders/<%= order.id %>">View</a></td>
           </tr>
         <% }) %>

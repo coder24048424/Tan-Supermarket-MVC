@@ -764,6 +764,63 @@ body.page-invoice {
   font-weight: 700;
 }
 
+.payment-methods {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.payment-method-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  text-align: center;
+  width: 100%;
+}
+
+.payment-method-btn.paynow {
+  background: #0a7c3b;
+  color: #f8fafc;
+}
+
+.payment-method-btn.nets {
+  background: #e83e8c;
+  color: #f8fafc;
+}
+
+.payment-method-btn.paypal {
+  background: #ffc439;
+  color: #1b1b1b;
+}
+
+.nets-qr-panel img {
+  max-width: 240px;
+  width: 100%;
+  height: auto;
+}
+
+.paypal-label {
+  margin-top: 1.25rem;
+  font-weight: 700;
+  color: var(--brand-dark);
+}
+
+.payment-method-btn.active {
+  box-shadow: 0 18px 35px rgba(16, 24, 40, 0.2);
+  transform: translateY(-1px);
+}
+
+.payment-method-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .chip {
     padding: 0.35rem 0.85rem;
     border-radius: 999px;
