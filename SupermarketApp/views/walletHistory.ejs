@@ -1,0 +1,62 @@
+<%- include('partials/head', { pageTitle: 'Wallet History', bodyClass: 'page-orders' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Store credit history</h2>
+      <p class="subtle-text mb-0">View your wallet transactions and invoices.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-secondary" href="/wallet">Back to wallet</a>
+    </div>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <% if (!transactions || !transactions.length) { %>
+    <div class="empty-state">
+      <h4>No wallet activity yet</h4>
+      <p class="subtle-text">Your store credit transactions will appear here.</p>
+      <a class="btn btn-primary" href="/wallet">Top up now</a>
+    </div>
+  <% } else { %>
+    <table class="table-modern mt-3">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Date</th>
+          <th>Method</th>
+          <th>Status</th>
+          <th>Amount</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% transactions.forEach(tx => { %>
+          <% const method = String(tx.method || '').toLowerCase(); %>
+          <% const methodLabel = method === 'paypal' ? 'PayPal' : method === 'nets' ? 'NETS QR' : method; %>
+          <% const amount = Number(tx.amount || 0); %>
+          <tr>
+            <td>#<%= tx.id %></td>
+            <td><%= new Date(tx.created_at).toLocaleString() %></td>
+            <td><%= methodLabel %></td>
+            <td><span class="status-pill success"><%= String(tx.status || 'completed').toUpperCase() %></span></td>
+            <td>$<%= amount.toFixed(2) %></td>
+            <td><a class="btn btn-link" href="/wallet/history/<%= tx.id %>">Invoice</a></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

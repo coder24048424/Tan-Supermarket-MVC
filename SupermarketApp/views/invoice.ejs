@@ -28,7 +28,7 @@
     <div class="summary-row">
       <span>Payment</span>
       <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
-      <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
+      <% const paymentLabel = paymentMethod === 'paypal' ? 'PAYPAL' : paymentMethod === 'stripe' ? 'STRIPE' : paymentMethod === 'grabpay' ? 'STRIPE (GRAB)' : paymentMethod === 'card' ? 'CARD' : paymentMethod === 'paynow' ? 'PAYNOW' : paymentMethod === 'nets' ? 'NETS QR' : paymentMethod === 'store_credit' ? 'STORE CREDIT' : 'UNPAID'; %>
       <span><%= paymentLabel %></span>
     </div>
     <div class="summary-row">

@@ -44,7 +44,7 @@
       <% } else { %>
         <div class="d-flex gap-2 align-items-center flex-wrap">
           <a class="btn btn-secondary" href="/shopping">Back to Shop</a>
-          <form action="/add-to-cart/<%= product.id %>" method="POST" class="d-flex gap-2 align-items-center">
+          <form action="/add-to-cart/<%= product.id %>" method="POST" class="d-flex gap-2 align-items-center" data-ajax-cart="true">
             <div class="qty-stepper" data-max="<%= product.quantity || 1 %>">
               <button type="button" class="btn-icon qty-minus" aria-label="Decrease quantity" <%= qty === 0 ? 'disabled' : '' %>>-</button>
               <input

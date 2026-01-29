@@ -1,0 +1,56 @@
+<%- include('partials/head', { pageTitle: 'Wallet Invoice', bodyClass: 'page-invoice' }) %>
+
+<section class="glass-panel invoice">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Store credit invoice</h2>
+      <p class="subtle-text mb-0">Transaction #<%= tx.id %></p>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-primary" onclick="window.print()">Print</button>
+      <a class="btn btn-secondary" href="/wallet/history">Back to history</a>
+    </div>
+  </div>
+
+  <div class="split-layout">
+    <div class="summary-card">
+      <% const method = String(tx.method || '').toLowerCase(); %>
+      <% const methodLabel = method === 'paypal' ? 'PayPal' : method === 'nets' ? 'NETS QR' : method; %>
+      <% const amount = Number(tx.amount || 0); %>
+      <h4>Amount paid</h4>
+      <p class="summary-total">$<%= amount.toFixed(2) %></p>
+      <div class="summary-row">
+        <span>Status</span>
+        <span class="status-pill success"><%= String(tx.status || 'completed').toUpperCase() %></span>
+      </div>
+      <div class="summary-row">
+        <span>Payment method</span>
+        <span class="status-pill"><%= methodLabel %></span>
+      </div>
+      <div class="summary-row">
+        <span>Date</span>
+        <span><%= new Date(tx.created_at).toLocaleString() %></span>
+      </div>
+      <% if (tx.provider_ref) { %>
+        <div class="summary-row">
+          <span>Reference</span>
+          <span><%= tx.provider_ref %></span>
+        </div>
+      <% } %>
+    </div>
+
+    <div class="summary-card">
+      <h4>Details</h4>
+      <div class="summary-row">
+        <span>Type</span>
+        <span>Store credit top-up</span>
+      </div>
+      <div class="summary-row">
+        <span>Currency</span>
+        <span>SGD</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/footer') %>

@@ -9,6 +9,7 @@
         <li><a href="/inventory">Inventory</a></li>
         <li><a href="/addProduct">Add Products</a></li>
         <li><a href="/admin/users">Users</a></li>
+        <li><a href="/admin/wallets">Wallets</a></li>
         <li><a href="/admin/orders">All Orders</a></li>
         <li>
           <a href="/admin/refunds">
@@ -18,11 +19,14 @@
             <% } %>
           </a>
         </li>
+        <li><a href="/admin/transactions">Transactions</a></li>
+        <li><a href="/admin/fraud-analysis">Fraud analysis</a></li>
         <li><a href="/profile">Profile</a></li>
       <% } else if (currentUser) { %>
         <li><a href="/">Home</a></li>
         <li><a href="/shopping">Shop</a></li>
         <li><a href="/orders">Orders</a></li>
+        <li><a href="/wallet">Wallet</a></li>
         <li><a href="/profile">Profile</a></li>
       <% } else { %>
         <li><a href="/">Home</a></li>
@@ -47,6 +51,40 @@
               <span class="cart-badge"><%= cartCount %></span>
             <% } %>
           </a>
+          <div class="nav-dropdown">
+            <button type="button" class="btn btn-secondary notif-btn">
+              Account
+              <% if (typeof unreadNotifications !== 'undefined' && unreadNotifications > 0) { %>
+                <span class="cart-badge"><%= unreadNotifications %></span>
+              <% } %>
+            </button>
+            <div class="nav-dropdown-menu account-menu">
+              <div class="account-row">
+                <span>Wallet balance</span>
+                <span class="chip success">$<%= Number(walletBalance || 0).toFixed(2) %></span>
+              </div>
+              <a class="account-link" href="/wallet">Manage wallet</a>
+              <div class="account-divider"></div>
+              <div class="account-title">Notifications</div>
+              <% if (!notifications || !notifications.length) { %>
+                <div class="notif-empty">No notifications yet.</div>
+              <% } else { %>
+                <ul class="notif-list">
+                  <% notifications.forEach(n => { %>
+                    <li class="notif-item <%= (n.status || '').toLowerCase() === 'unread' ? 'unread' : '' %>">
+                      <strong><%= n.title %></strong>
+                      <div class="subtle-text"><%= n.message %></div>
+                      <div class="subtle-text"><%= new Date(n.created_at).toLocaleString() %></div>
+                    </li>
+                  <% }) %>
+                </ul>
+                <form action="/notifications/read-all" method="POST" class="m-0 p-2">
+                  <button type="submit" class="btn btn-link">Mark all as read</button>
+                </form>
+              <% } %>
+              <a class="account-link" href="/notifications">View all notifications</a>
+            </div>
+          </div>
         <% } %>
         <a class="btn btn-primary" href="/logout">Logout</a>
       <% } else { %>

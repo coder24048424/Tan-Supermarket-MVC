@@ -78,7 +78,7 @@
           <% } %>
         </p>
 
-        <form action="/add-to-cart/<%= product.id %>" method="POST" class="product-actions">
+        <form action="/add-to-cart/<%= product.id %>" method="POST" class="product-actions" data-ajax-cart="true">
           <div class="d-flex justify-content-between align-items-center">
             <span class="price-tag">Price: $<%= product.price.toFixed(2) %></span>
           </div>
@@ -133,6 +133,7 @@
         clampAndSet(parseInt(input.value || '1', 10));
       });
     });
+
   });
 </script>
 

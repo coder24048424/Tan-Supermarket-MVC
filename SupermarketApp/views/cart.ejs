@@ -1,12 +1,20 @@
 <%- include('partials/head', { pageTitle: "Your Tan's Supermarket cart", bodyClass: 'page-cart' }) %>
 
 <section class="glass-panel">
-  <div class="d-flex justify-content-between flex-wrap align-items-center gap-2 mb-3">
+  <% const hasItems = Array.isArray(cart) && cart.length > 0; %>
+  <div class="cart-hero">
     <div>
       <h2 class="section-title mb-1">Cart overview</h2>
       <p class="subtle-text mb-0">Cart out soon! While stock last!</p>
     </div>
-    <a class="btn btn-secondary" href="/shopping">Continue shopping</a>
+    <div class="hero-actions">
+      <a class="btn btn-secondary" href="/shopping">Continue shopping</a>
+      <% if (hasItems) { %>
+        <form action="/cart/clear" method="POST" class="m-0">
+          <button type="submit" class="btn btn-ghost">Clear cart</button>
+        </form>
+      <% } %>
+    </div>
   </div>
 
   <% if (errors && errors.length) { %>
@@ -20,7 +28,7 @@
     </div>
   <% } %>
 
-  <% if (cart.length === 0) { %>
+  <% if (!hasItems) { %>
     <div class="empty-state">
       <h4>Your cart is empty</h4>
       <p>Discover fresh picks and artisan treats.</p>
@@ -31,14 +39,9 @@
     <% cart.forEach(item => { total += item.price * item.quantity; }); %>
 
     <div class="split-layout">
-      <div class="d-flex flex-column gap-3">
-        <div class="d-flex justify-content-end">
-          <form action="/cart/clear" method="POST" class="m-0">
-            <button type="submit" class="btn btn-secondary">Clear cart</button>
-          </form>
-        </div>
-        <% cart.forEach(item => { %>
-          <div class="inventory-card">
+      <div class="d-flex flex-column gap-3 cart-products">
+      <% cart.forEach(item => { %>
+        <div class="inventory-card">
             <div class="d-flex gap-3 align-items-center">
               <img src="/images/<%= item.image %>" alt="<%= item.productName %>" style="width:140px;height:140px;object-fit:contain;border-radius:20px;background:#f7f7f7;padding:0.5rem;">
               <div class="flex-grow-1">
@@ -67,7 +70,7 @@
         <% }) %>
       </div>
 
-      <div class="summary-card">
+      <div class="summary-card cart-summary">
         <h3 class="mb-3">Order summary</h3>
         <div class="summary-row">
           <span>Items</span>

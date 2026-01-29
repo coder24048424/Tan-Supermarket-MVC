@@ -1,13 +1,29 @@
 const ProductModel = require('../models/ProductModel');
 const UserCartModel = require('../models/UserCartModel');
+const WalletModel = require('../models/WalletModel');
 
 function CartController() {
   return {
     addToCart(req, res) {
       const productId = parseInt(req.params.id, 10);
-      const quantity = parseInt(req.body.quantity, 10) || 1;
+      const quantity = parseInt((req.body && req.body.quantity) || '1', 10) || 1;
 
       const sessionUser = req.session.user;
+      const wantsJson = req.xhr || String(req.get('accept') || '').includes('application/json');
+
+      const respond = (type, message) => {
+        const cartCount = (req.session.cart || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+        if (wantsJson) {
+          return res.json({ success: type === 'success', message, cartCount });
+        }
+        if (type === 'error') {
+          req.flash('error', message);
+        } else {
+          req.flash('success', message);
+        }
+        const destination = req.get('Referer') || '/shopping';
+        return res.redirect(destination);
+      };
 
       const ensureSessionCart = (cb) => {
         if (sessionUser && sessionUser.role !== 'admin') {
@@ -24,16 +40,14 @@ function CartController() {
 
         ProductModel.getProductById(productId, (err, product) => {
           if (err || !product) {
-            req.flash('error', 'Unable to add this product right now.');
-            return res.redirect('/shopping');
+            return respond('error', 'Unable to add this product right now.');
           }
 
           const existing = req.session.cart.find(i => i.productId === productId);
           const available = Number(product.quantity) || 0;
 
           if (available === 0) {
-            req.flash('error', `${product.productName} is currently out of stock.`);
-            return res.redirect('/shopping');
+            return respond('error', `${product.productName} is currently out of stock.`);
           }
 
           const existingQty = existing ? existing.quantity : 0;
@@ -58,39 +72,46 @@ function CartController() {
             });
           }
 
-          const destination = '/cart';
           if (!sessionUser || sessionUser.role === 'admin') {
             if (capped) {
-              req.flash('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
-            } else {
-              req.flash('success', `${product.productName} added to your cart.`);
+              return respond('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
             }
-            return res.redirect(destination);
+            return respond('success', `${product.productName} added to your cart.`);
           }
 
           return UserCartModel.setItemQuantity(sessionUser.id, product.id, nextQuantity, (persistErr) => {
             if (persistErr) {
               console.error('Failed to persist cart item:', persistErr);
-              req.flash('error', 'Unable to update your cart right now.');
-              return res.redirect('/shopping');
+              return respond('error', 'Unable to update your cart right now.');
             }
             if (capped) {
-              req.flash('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
-            } else {
-              req.flash('success', `${product.productName} added to your cart.`);
+              return respond('error', `${product.productName} only has ${available} in stock. Cart quantity set to the maximum.`);
             }
-            return res.redirect(destination);
+            return respond('success', `${product.productName} added to your cart.`);
           });
         });
       });
     },
 
     cartPage(req, res) {
-      res.render('cart', {
+      const render = (balance = 0) => res.render('cart', {
         cart: req.session.cart || [],
         user: req.session.user,
         errors: req.flash('error'),
-        success: req.flash('success')
+        success: req.flash('success'),
+        walletBalance: Number(balance) || 0
+      });
+
+      const user = req.session.user;
+      if (!user || user.role === 'admin') {
+        return render(0);
+      }
+
+      WalletModel.getBalance(user.id, (err, balance = 0) => {
+        if (err) {
+          console.error('Failed to load wallet balance for cart page:', err);
+        }
+        return render(balance);
       });
     },
 

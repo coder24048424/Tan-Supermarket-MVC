@@ -2,6 +2,7 @@ const OrdersModel = require('../models/OrdersModel');
 const RefundModel = require('../models/RefundModel');
 const ProductModel = require('../models/ProductModel');
 const UserCartModel = require('../models/UserCartModel');
+const WalletModel = require('../models/WalletModel');
 
 function OrdersController() {
   return {
@@ -291,6 +292,7 @@ function OrdersController() {
       const orderId = parseInt(req.params.id, 10);
       const success = req.flash('success');
       const errors = req.flash('error');
+      const refundDestination = (req.flash('refundDestination') || [])[0] || '';
 
       if (Number.isNaN(orderId)) {
         req.flash('error', 'Invalid order');
@@ -301,13 +303,25 @@ function OrdersController() {
 
       const renderOrder = (order, refunds = []) => {
         const ownerDeleted = String(order.owner_role || '').toLowerCase() === 'deleted';
-        return res.render('orderDetails', {
-          order,
-          user: sessionUser,
-          refunds,
-          ownerDeleted,
-          success,
-          errors
+      const respond = (balance = 0) => res.render('orderDetails', {
+        order,
+        user: sessionUser,
+        refunds,
+        ownerDeleted,
+        success,
+        errors,
+        storeCreditBalance: Number(balance) || 0
+        ,
+        refundDestination
+      });
+        if (!sessionUser) {
+          return respond(0);
+        }
+        return WalletModel.getBalance(sessionUser.id, (balanceErr, balance = 0) => {
+          if (balanceErr) {
+            console.error('Failed to load wallet balance for order view:', balanceErr);
+          }
+          return respond(balance);
         });
       };
 
@@ -533,7 +547,7 @@ function OrdersController() {
           return res.redirect(`/orders/${orderId}`);
         }
 
-        RefundModel.createRefund(orderId, amount, reason, (err) => {
+        RefundModel.createRefund(orderId, amount, reason, 'store_credit', (err) => {
           if (err) {
             console.error('Failed to create refund:', err);
             req.flash('error', 'Could not create refund request.');

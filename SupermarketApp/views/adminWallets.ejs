@@ -1,0 +1,67 @@
+<%- include('partials/head', { pageTitle: 'Wallet balances', bodyClass: 'page-admin' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Wallet balances</h2>
+      <p class="subtle-text mb-0">View store credit balances for all users.</p>
+    </div>
+    <a class="btn btn-secondary" href="/admin/dashboard">Back to dashboard</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <div class="summary-card mb-3">
+    <div class="summary-row">
+      <span>Total store credit</span>
+      <span class="summary-total">$<%= Number(totalBalance || 0).toFixed(2) %></span>
+    </div>
+  </div>
+
+  <% if (!users || !users.length) { %>
+    <div class="empty-state">
+      <p>No users found.</p>
+    </div>
+  <% } else { %>
+    <div class="table-responsive">
+      <table class="table-modern w-100">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Balance</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% users.forEach(u => { %>
+            <% const isDeleted = String(u.role || '').toLowerCase() === 'deleted'; %>
+            <tr>
+              <td><%= u.id %></td>
+              <td><%= u.username %></td>
+              <td><%= u.email %></td>
+              <td>
+                <span class="chip <%= isDeleted ? 'danger' : '' %>"><%= (u.role || '').toUpperCase() %></span>
+              </td>
+              <td>$<%= Number(u.balance || 0).toFixed(2) %></td>
+              <td><%= u.updated_at ? new Date(u.updated_at).toLocaleString() : '-' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

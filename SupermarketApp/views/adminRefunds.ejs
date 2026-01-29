@@ -26,13 +26,15 @@
     </div>
   <% } else { %>
     <div class="table-responsive">
-      <table class="table-modern w-100">
+      <table class="table-modern w-100 refunds-table">
         <thead>
           <tr>
             <th>ID</th>
             <th>Order</th>
             <th>User</th>
             <th>Amount</th>
+            <th>Payment</th>
+            <th>Credited</th>
             <th>Status</th>
             <th>Reason</th>
             <th>Created</th>
@@ -46,17 +48,43 @@
               <td><a href="/orders/<%= r.order_id %>">Order #<%= r.order_id %></a></td>
               <td><%= r.username || 'Unknown' %></td>
               <td>$<%= Number(r.amount || 0).toFixed(2) %></td>
+              <td><%= r.payment_method ? (r.payment_method.toUpperCase()) : 'Unknown' %></td>
+              <td>
+                <% const status = String(r.status || '').toLowerCase(); %>
+                <% const creditedAmount = Number(r.approved_amount || r.amount || 0).toFixed(2); %>
+                <% if (status === 'approved' || status === 'processed') { %>
+                  <span class="status-pill success credit-pill">$<%= creditedAmount %></span>
+                <% } else { %>
+                  <span class="status-pill warning">Pending</span>
+                <% } %>
+              </td>
               <td><span class="status-pill"><%= (r.status || 'pending').toUpperCase() %></span></td>
               <td style="max-width:280px;"><%= r.reason || 'No reason provided' %></td>
               <td><%= r.created_at ? new Date(r.created_at).toLocaleString() : '' %></td>
               <td>
-                <form action="/admin/refunds/<%= r.id %>/status" method="POST" class="d-flex gap-2 align-items-center m-0">
-                  <select name="status" class="form-select form-select-sm">
+                <form action="/admin/refunds/<%= r.id %>/status" method="POST" class="refund-action">
+                  <div class="d-flex gap-2 flex-wrap mb-1 refund-amount-group" data-requested-amount="<%= Number(r.amount || 0).toFixed(2) %>" data-initial-mode="<%= (r.approved_amount && Number(r.approved_amount) !== Number(r.amount || 0)) ? 'partial' : 'full' %>">
+                    <select name="mode" class="form-select form-select-sm refund-mode-select">
+                      <option value="full">Full refund</option>
+                      <option value="partial">Partial refund</option>
+                    </select>
+                    <input
+                      class="form-control form-control-sm refund-amount-input"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max="<%= Number(r.amount || 0).toFixed(2) %>"
+                      name="approvedAmount"
+                      value="<%= Number(r.approved_amount || r.amount || 0).toFixed(2) %>"
+                      required
+                    >
+                  </div>
+                  <select name="status" class="form-select form-select-sm refund-select mb-1">
                     <% ['pending','approved','rejected'].forEach(opt => { %>
                       <option value="<%= opt %>" <%= (r.status || '').toLowerCase() === opt ? 'selected' : '' %>><%= opt %></option>
                     <% }) %>
                   </select>
-                  <button type="submit" class="btn btn-primary btn-sm">Update</button>
+                  <button type="submit" class="btn btn-primary btn-sm w-100">Update</button>
                 </form>
               </td>
             </tr>
@@ -66,5 +94,28 @@
     </div>
   <% } %>
 </section>
+
+<script>
+  document.querySelectorAll('.refund-action').forEach(form => {
+    const modeSelect = form.querySelector('.refund-mode-select');
+    const amountInput = form.querySelector('input[name="approvedAmount"]');
+    const amountGroup = form.querySelector('.refund-amount-group');
+    if (!modeSelect || !amountInput || !amountGroup) return;
+    const requested = Number(amountGroup.dataset.requestedAmount || 0);
+    const initialMode = amountGroup.dataset.initialMode || 'full';
+    const toggle = () => {
+      const isPartial = modeSelect.value === 'partial';
+      if (!isPartial) {
+        amountInput.value = requested.toFixed(2);
+        amountInput.readOnly = true;
+      } else {
+        amountInput.readOnly = false;
+      }
+    };
+    modeSelect.value = initialMode;
+    modeSelect.addEventListener('change', toggle);
+    toggle();
+  });
+</script>
 
 <%- include('partials/footer') %>

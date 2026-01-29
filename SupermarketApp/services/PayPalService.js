@@ -10,9 +10,9 @@ async function getAccessToken() {
     method: 'POST',
     headers: {
       Authorization: `Basic ${Buffer.from(`${PAYPAL_CLIENT}:${PAYPAL_SECRET}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded'
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: 'grant_type=client_credentials'
+    body: 'grant_type=client_credentials',
   });
 
   const data = await response.json();
@@ -23,25 +23,32 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-async function createOrder(amount, currency = 'SGD') {
+async function createOrder(amount, currency = 'SGD', options = {}) {
   const accessToken = await getAccessToken();
+  const payload = {
+    intent: 'CAPTURE',
+    purchase_units: [
+      {
+        amount: {
+          currency_code: currency,
+          value: amount,
+        },
+      },
+    ],
+  };
+  if (options.returnUrl && options.cancelUrl) {
+    payload.application_context = {
+      return_url: options.returnUrl,
+      cancel_url: options.cancelUrl,
+    };
+  }
   const response = await fetch(`${PAYPAL_API}/v2/checkout/orders`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`
+      Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({
-      intent: 'CAPTURE',
-      purchase_units: [
-        {
-          amount: {
-            currency_code: currency,
-            value: amount
-          }
-        }
-      ]
-    })
+    body: JSON.stringify(payload),
   });
 
   const data = await response.json();
@@ -58,8 +65,8 @@ async function captureOrder(orderId) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`
-    }
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 
   const data = await response.json();
@@ -70,4 +77,29 @@ async function captureOrder(orderId) {
   return data;
 }
 
-module.exports = { createOrder, captureOrder };
+async function refundCapture(captureId, amount, currency = 'SGD') {
+  if (!captureId) throw new Error('Missing capture ID for refund.');
+  const accessToken = await getAccessToken();
+  const payload = {
+    amount: {
+      currency_code: currency,
+      value: Number(amount || 0).toFixed(2)
+    }
+  };
+  const response = await fetch(`${PAYPAL_API}/v2/payments/captures/${captureId}/refund`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const detail = data && data.details && data.details[0] && data.details[0].issue ? data.details[0].issue : (data && data.message ? data.message : 'Unable to refund PayPal capture.');
+    throw new Error(detail);
+  }
+  return data;
+}
+
+module.exports = { createOrder, captureOrder, refundCapture };

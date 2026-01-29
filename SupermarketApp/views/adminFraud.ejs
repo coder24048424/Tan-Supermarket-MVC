@@ -1,0 +1,92 @@
+<%- include('partials/head', { pageTitle: 'Fraud analysis', bodyClass: 'page-fraud' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center">
+    <div>
+      <h2 class="section-title mb-1">Fraud analysis</h2>
+      <p class="subtle-text mb-0">Review flagged orders along with the computed fraud score, severity, and reason flags.</p>
+    </div>
+    <a class="btn btn-secondary" href="/admin/dashboard">Back to dashboard</a>
+  </div>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mt-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mt-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <div class="fraud-stats d-flex gap-3 flex-wrap mt-3">
+    <div class="stat-card">
+      <div class="stat-label">Flagged orders</div>
+      <div class="stat-value"><%= stats.total %></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Average score</div>
+      <div class="stat-value"><%= stats.averageScore %></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">High severity</div>
+      <div class="stat-value text-danger"><%= stats.severityCounts.high || 0 %></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Medium severity</div>
+      <div class="stat-value text-warning"><%= stats.severityCounts.medium || 0 %></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Low severity</div>
+      <div class="stat-value text-success"><%= stats.severityCounts.low || 0 %></div>
+    </div>
+  </div>
+
+  <% if (stats.topReasons && stats.topReasons.length) { %>
+    <div class="reason-pill-row mt-3">
+      <% stats.topReasons.forEach(r => { %>
+        <span class="pill pill-secondary"><%= r.reason %> (<%= r.count %>)</span>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <% if (!flaggedOrders.length) { %>
+    <div class="empty-state mt-4">
+      <p>No fraud flags detected yet.</p>
+    </div>
+  <% } else { %>
+    <div class="table-responsive mt-4">
+      <table class="table-modern w-100 fraud-table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>User</th>
+            <th>Amount</th>
+            <th>Method</th>
+            <th>Score</th>
+            <th>Severity</th>
+            <th>Reasons</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% flaggedOrders.forEach(order => { %>
+            <tr>
+              <td><a href="/orders/<%= order.id %>">Order #<%= order.id %></a></td>
+              <td><%= order.username %></td>
+              <td>$<%= Number(order.total || 0).toFixed(2) %></td>
+              <td><%= (order.method || 'Unknown').toUpperCase() %></td>
+              <td><%= order.score %></td>
+              <td><span class="status-pill <%= order.severity === 'high' ? 'danger' : order.severity === 'medium' ? 'warning' : 'success' %>"><%= order.severity.toUpperCase() %></span></td>
+              <td><%= order.reasons.length ? order.reasons.join(', ') : '—' %></td>
+              <td><%= order.created_at ? new Date(order.created_at).toLocaleString() : '' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

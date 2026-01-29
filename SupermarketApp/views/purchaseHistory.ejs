@@ -36,7 +36,7 @@
         <% const orderStatus = (order.status || 'pending').toLowerCase(); %>
         <% const shippingStatus = (order.shipping_status || 'processing').toLowerCase(); %>
         <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
-        <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
+        <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'stripe' ? 'Stripe' : paymentMethod === 'grabpay' ? 'Stripe (Grab)' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : paymentMethod === 'store_credit' ? 'STORE CREDIT' : 'Unpaid'; %>
         <div class="inventory-card">
           <div class="d-flex justify-content-between align-items-start">
             <div>

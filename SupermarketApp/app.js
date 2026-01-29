@@ -12,6 +12,10 @@ const PaymentController = require('./controllers/PaymentController');
 const AdminDashboardController = require('./controllers/AdminDashboardController');
 const HomeController = require('./controllers/HomeController');
 const CartController = require('./controllers/CartController');
+const WalletController = require('./controllers/WalletController');
+const FraudController = require('./controllers/FraudController');
+const WalletModel = require('./models/WalletModel');
+const NotificationModel = require('./models/NotificationModel');
 const NetsService = require('./services/net');
 const OrderService = require('./services/OrderService');
 const OrdersModel = require('./models/OrdersModel');
@@ -19,6 +23,7 @@ const ProductModel = require('./models/ProductModel');
 const UserModel = require('./models/UserModel');
 const RefundModel = require('./models/RefundModel');
 const UserCartModel = require('./models/UserCartModel');
+const TransactionController = require('./controllers/TransactionController');
 
 const app = express();
 
@@ -93,12 +98,33 @@ app.use((req, res, next) => {
     res.locals.user = req.session.user || null;
     const cart = req.session.cart || [];
     res.locals.cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    res.locals.walletBalance = null;
+    res.locals.notifications = [];
+    res.locals.unreadNotifications = 0;
     res.locals.navCategories = [];
     res.locals.pendingRefundCount = 0;
     if (res.locals.user && res.locals.user.role === 'admin') {
         return RefundModel.getPendingCount((err, count) => {
             if (!err) res.locals.pendingRefundCount = count;
             return next();
+        });
+    }
+    if (res.locals.user && res.locals.user.role !== 'admin') {
+        return WalletModel.getBalance(res.locals.user.id, (err, balance = 0) => {
+            if (!err) {
+                res.locals.walletBalance = Number(balance) || 0;
+            }
+            return NotificationModel.listByUser(res.locals.user.id, 5, (listErr, notifications = []) => {
+                if (!listErr) {
+                    res.locals.notifications = notifications;
+                }
+                return NotificationModel.countUnread(res.locals.user.id, (countErr, total = 0) => {
+                    if (!countErr) {
+                        res.locals.unreadNotifications = total;
+                    }
+                    return next();
+                });
+            });
         });
     }
     next();
@@ -194,6 +220,10 @@ app.get('/', HomeController.homePage);
 // Admin dashboard
 app.get('/admin/dashboard', checkAuthenticated, checkAdmin, (req, res) =>
     AdminDashboardController.dashboard(req, res)
+);
+
+app.get('/admin/fraud-analysis', checkAuthenticated, checkAdmin, (req, res) =>
+    FraudController.analysis(req, res)
 );
 
 // ========================
@@ -318,11 +348,73 @@ app.get('/logout', (req, res) => {
     res.redirect('/');
 });
 
+// Notifications
+app.post('/notifications/read-all', checkAuthenticated, checkCustomer, (req, res) =>
+    NotificationModel.markAllRead(req.session.user.id, () => res.redirect(req.get('Referer') || '/'))
+);
+app.get('/notifications', checkAuthenticated, checkCustomer, (req, res) =>
+    NotificationModel.listAllByUser(req.session.user.id, (err, notifications = []) => {
+        if (err) {
+            console.error('Failed to load notifications:', err);
+            req.flash('error', 'Unable to load notifications.');
+        }
+        return res.render('notifications', {
+            notifications,
+            errors: req.flash('error'),
+            success: req.flash('success')
+        });
+    })
+);
+
 // ========================
 // SHOPPING
 // ========================
 app.get('/shopping', (req, res) =>
     ProductController.listProducts(req, res)
+);
+
+// Wallet (store credit)
+app.get('/wallet', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.walletPage(req, res)
+);
+app.post('/wallet/topup/prepare', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.topUp(req, res)
+);
+app.get('/wallet/payment', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.walletPaymentPage(req, res)
+);
+app.post('/wallet/payment/method', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.setPaymentMethod(req, res)
+);
+app.post('/wallet/stripe/create-session', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.createStripeSession(req, res)
+);
+app.get('/wallet/stripe/success', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.stripeSuccess(req, res)
+);
+app.post('/wallet/paypal/create-order', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.createPayPalOrder(req, res)
+);
+app.get('/wallet/paypal/return', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.paypalReturn(req, res)
+);
+app.post('/wallet/paypal/capture', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.paypalCapture(req, res)
+);
+app.get('/wallet/history', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.walletHistory(req, res)
+);
+app.get('/wallet/history/:id', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.walletInvoice(req, res)
+);
+app.post('/wallet/payment/method', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.setPaymentMethod(req, res)
+);
+app.post('/wallet/nets-qr/request', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.requestNetsQr(req, res)
+);
+app.get('/wallet/nets-qr/success', checkAuthenticated, checkCustomer, (req, res) =>
+    WalletController.netsSuccess(req, res)
 );
 
 // ========================
@@ -432,9 +524,19 @@ app.get('/payment', checkAuthenticated, checkCustomer, (req, res) =>
     PaymentController.paymentPage(req, res)
 );
 
+// Poll payment status (fallback for Stripe/GrabPay/PayNow)
+app.get('/payment/status', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.pollPaymentStatus(req, res)
+);
+
 // Payment method selection
 app.post('/payment/method', checkAuthenticated, checkCustomer, (req, res) =>
     PaymentController.setPaymentMethod(req, res)
+);
+
+// Store credit payment
+app.post('/payment/store-credit', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.payWithStoreCredit(req, res)
 );
 
 // NETS QR payment
@@ -458,11 +560,23 @@ app.post('/nets-qr/request', checkAuthenticated, checkCustomer, async (req, res)
             return res.status(400).json({ success: false, error: 'No pending checkout found.' });
         }
 
+        // Ensure NETS API configuration exists
+        if (!process.env.API_KEY || !process.env.PROJECT_ID) {
+            console.error('NETS configuration missing: API_KEY or PROJECT_ID not set.');
+            return res.status(500).json({ success: false, error: 'NETS not configured on server. Please contact administrator.' });
+        }
+
         pending.paymentMethod = 'nets';
         req.session.pendingCheckout = pending;
 
         const cartTotal = Number(pending.total || 0).toFixed(2);
-        const payload = await NetsService.generateQrData(cartTotal);
+        let payload;
+        try {
+            payload = await NetsService.generateQrData(cartTotal);
+        } catch (err) {
+            console.error('NetsService.generateQrData error:', err && err.message ? err.message : err);
+            return res.status(500).json({ success: false, error: 'NETS service error. Please try again later.' });
+        }
         if (!payload || !payload.success) {
             return res.status(400).json(payload || { success: false, error: 'Unable to generate NETS QR.' });
         }
@@ -545,6 +659,11 @@ app.get('/nets-qr/success', checkAuthenticated, checkCustomer, async (req, res) 
             }
         });
         req.flash('success', 'Payment successful. Thank you for your payment!');
+        NotificationModel.createNotification({
+            userId: user.id,
+            title: 'Payment successful',
+            message: `Your NETS payment was successful for order #${existing.orderId}.`
+        }, () => {});
         return res.redirect(`/orders/${existing.orderId}`);
     }
 
@@ -574,6 +693,11 @@ app.get('/nets-qr/success', checkAuthenticated, checkCustomer, async (req, res) 
             }
         });
         req.flash('success', 'Payment successful. Thank you for your payment!');
+        NotificationModel.createNotification({
+            userId: user.id,
+            title: 'Payment successful',
+            message: `Your NETS payment of $${Number(pending.total || 0).toFixed(2)} was successful.`
+        }, () => {});
         return res.redirect(`/orders/${orderResult.orderId}`);
     } catch (err) {
         console.error('Failed to finalize NETS payment:', err);
@@ -595,12 +719,10 @@ app.get('/nets-qr/cancel', checkAuthenticated, checkCustomer, (req, res) =>
     res.render('netsQrCancel', (() => {
         const pending = req.session.pendingCheckout || {};
         const method = String(pending.paymentMethod || '').toLowerCase();
-        const methodLabel = method === 'paypal'
-            ? 'PayPal'
-            : method === 'card'
-                ? 'Card'
-                : method === 'paynow'
-                    ? 'PayNow'
+        const methodLabel = method === 'card'
+            ? 'Card'
+            : method === 'paynow'
+                ? 'STRIPE (PAYNOW)'
                     : method === 'nets'
                         ? 'NETS QR'
                         : 'Unknown';
@@ -614,12 +736,31 @@ app.get('/nets-qr/cancel', checkAuthenticated, checkCustomer, (req, res) =>
     })())
 );
 
+// Stripe checkout
+app.post('/stripe/create-checkout', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.createStripeCheckout(req, res)
+);
+// PayNow (Stripe) checkout
+app.post('/payment/paynow', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.createPayNowSession(req, res)
+);
+
+app.get('/stripe/success', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.stripeSuccess(req, res)
+);
+
 // PayPal checkout
 app.post('/paypal/create-order', checkAuthenticated, checkCustomer, (req, res) =>
     PaymentController.createPayPalOrder(req, res)
 );
-app.post('/paypal/capture-order', checkAuthenticated, checkCustomer, (req, res) =>
-    PaymentController.capturePayPalOrder(req, res)
+app.get('/paypal/return', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.paypalReturn(req, res)
+);
+app.get('/paypal/cancel', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.paypalCancel(req, res)
+);
+app.post('/paypal/capture', checkAuthenticated, checkCustomer, (req, res) =>
+    PaymentController.paypalCapture(req, res)
 );
 
 // Place order
@@ -640,6 +781,9 @@ app.get('/orders/:id', checkAuthenticated, (req, res) =>
 // Admin all orders
 app.get('/admin/orders', checkAuthenticated, checkAdmin, (req, res) =>
     OrdersController.adminAllOrders(req, res)
+);
+app.get('/admin/wallets', checkAuthenticated, checkAdmin, (req, res) =>
+    WalletController.adminWallets(req, res)
 );
 // Order invoice (HTML)
 app.get('/orders/:id/invoice', checkAuthenticated, (req, res) =>
@@ -667,6 +811,9 @@ app.get('/admin/refunds', checkAuthenticated, checkAdmin, (req, res) =>
 );
 app.post('/admin/refunds/:id/status', checkAuthenticated, checkAdmin, (req, res) =>
     RefundController.updateStatus(req, res)
+);
+app.get('/admin/transactions', checkAuthenticated, checkAdmin, (req, res) =>
+    TransactionController.listTransactions(req, res)
 );
 
 // Profile

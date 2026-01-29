@@ -1,0 +1,106 @@
+<%- include('partials/head', { pageTitle: 'Transaction log', bodyClass: 'page-transactions' }) %>
+
+<section class="glass-panel">
+  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+    <div>
+      <h2 class="section-title mb-1">Transaction log</h2>
+      <p class="subtle-text mb-0">Latest gateway and wallet transactions captured from checkout.</p>
+    </div>
+    <a class="btn btn-secondary" href="/admin/dashboard">Back to dashboard</a>
+  </div>
+
+  <form action="/admin/transactions" method="GET" class="filter-row mb-3 d-flex gap-2 flex-wrap align-items-end">
+    <div>
+      <label class="form-label" for="filterOrder">Order #</label>
+      <input class="form-control" type="text" name="orderId" id="filterOrder" value="<%= filters && filters.orderId ? filters.orderId : '' %>" placeholder="Order ID">
+    </div>
+    <div>
+      <label class="form-label" for="filterPayer">Buyer / payer</label>
+      <input class="form-control" type="text" name="payer" id="filterPayer" value="<%= filters && filters.payer ? filters.payer : '' %>" placeholder="name, email, payerId">
+    </div>
+    <div>
+      <label class="form-label" for="filterMethod">Method</label>
+      <select class="form-select" id="filterMethod" name="method">
+        <option value="">All</option>
+        <% ['stripe','paynow','grabpay','paypal','nets','store_credit'].forEach(m => { %>
+          <option value="<%= m %>" <%= filters && filters.method === m ? 'selected' : '' %>><%= m.toUpperCase() %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="filterStatus">Status</label>
+      <select class="form-select" id="filterStatus" name="status">
+        <option value="">All</option>
+        <% ['paid','pending','failed','cancelled'].forEach(status => { %>
+          <option value="<%= status %>" <%= filters && filters.status === status ? 'selected' : '' %>><%= status.toUpperCase() %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="filterFrom">From</label>
+      <input class="form-control" type="date" name="from" id="filterFrom" value="<%= filters && filters.from ? filters.from : '' %>">
+    </div>
+    <div>
+      <label class="form-label" for="filterTo">To</label>
+      <input class="form-control" type="date" name="to" id="filterTo" value="<%= filters && filters.to ? filters.to : '' %>">
+    </div>
+    <div>
+      <label class="form-label d-block">&nbsp;</label>
+      <button type="submit" class="btn btn-primary">Apply</button>
+    </div>
+  </form>
+
+  <% if (errors && errors.length) { %>
+    <div class="toast error mb-3">
+      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+  <% if (success && success.length) { %>
+    <div class="toast success mb-3">
+      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
+    </div>
+  <% } %>
+
+  <% if (!transactions || !transactions.length) { %>
+    <div class="empty-state">
+      <p>No transactions have been recorded yet.</p>
+    </div>
+  <% } else { %>
+    <div class="table-responsive">
+      <table class="table-modern w-100 transactions-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Order</th>
+            <th>Buyer</th>
+            <th>Payer</th>
+            <th>Email</th>
+            <th>Amount</th>
+            <th>Currency</th>
+            <th>Method</th>
+            <th>Status</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% transactions.forEach(tx => { %>
+            <tr>
+              <td>#<%= tx.id %></td>
+              <td><a href="/orders/<%= tx.orderId %>">Order #<%= tx.orderId %></a></td>
+              <td><%= tx.payerName || 'Unknown' %></td>
+              <td><%= tx.payerId %></td>
+              <td><%= tx.payerEmail %></td>
+              <td>$<%= Number(tx.amount || 0).toFixed(2) %></td>
+              <td><%= (tx.currency || 'SGD').toUpperCase() %></td>
+              <td><%= (tx.method || 'unknown').toUpperCase() %></td>
+              <td><span class="status-pill"><%= (tx.status || 'unknown').toUpperCase() %></span></td>
+              <td><%= tx.time ? new Date(tx.time).toLocaleString() : '' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+
+<%- include('partials/footer') %>

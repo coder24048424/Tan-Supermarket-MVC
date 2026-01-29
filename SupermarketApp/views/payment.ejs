@@ -1,7 +1,7 @@
 <%- include('partials/head', { pageTitle: 'Payment', bodyClass: 'page-checkout' }) %>
 
 <section class="glass-panel">
-  <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+  <div class="payment-hero">
     <div>
       <h2 class="section-title mb-1">Choose your payment method</h2>
       <p class="subtle-text mb-0">Complete payment to finalize your order.</p>
@@ -9,26 +9,79 @@
     <a class="btn btn-secondary" href="/checkout">Back to checkout</a>
   </div>
 
-  <% if (errors && errors.length) { %>
-    <div class="toast error mb-3">
-      <% errors.forEach(msg => { %><div><%= msg %></div><% }) %>
-    </div>
-  <% } %>
-  <% if (success && success.length) { %>
-    <div class="toast success mb-3">
-      <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
-    </div>
-  <% } %>
+  <div class="payment-layout">
+    <div class="payment-panel" id="payment-panel">
+      <div class="panel-heading">
+        <h4>Payment options</h4>
+        <p class="subtle-text mb-0">Each option opens in a new tab; select store credit to stay here.</p>
+        <div class="selected-method" role="status" aria-live="polite">
+          <span class="selected-badge" aria-hidden="true">✓</span>
+          <span id="selected-method-label">Store credit</span>
+        </div>
+      </div>
 
-  <div class="split-layout">
-    <div class="summary-card" id="payment-panel">
-      <h4>Payment options</h4>
       <div class="payment-methods">
-        <button type="button" class="payment-method-btn nets" id="nets-qr-button">
-          NETS QR
+        <button type="button" class="payment-method-btn store-credit" data-method="store_credit">
+          <span class="pm-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <rect x="6" y="6" width="12" height="12" rx="6" stroke="currentColor" stroke-width="1.6" fill="none"/>
+              <path d="M6 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M9 10h1.5v4H9zM13 10h1.5v4H13z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="pm-label">Store credit</span>
         </button>
-        <button type="button" class="payment-method-btn paynow" disabled>
-          PayNow (coming soon)
+
+        <button type="button" class="payment-method-btn paynow" data-method="paynow">
+          <span class="pm-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M4 5h6v6H4zM14 3h6v6h-6zM9 11h6v6H9z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="pm-label">Stripe (PayNow)</span>
+        </button>
+
+        <button type="button" class="payment-method-btn grabpay" data-method="grabpay">
+          <span class="pm-icon">
+            <svg width="24" height="24" fill="none">
+              <rect x="3" y="4" width="18" height="16" rx="4" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M9 11h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M9 15h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="pm-label">Stripe (Grab)</span>
+        </button>
+
+        <button type="button" class="payment-method-btn nets" id="nets-qr-button" data-method="nets">
+          <span class="pm-icon">
+            <svg width="24" height="24" fill="none">
+              <rect x="2" y="2" width="6" height="6" rx="1.5" fill="currentColor"/>
+              <rect x="16" y="2" width="6" height="6" rx="1.5" fill="currentColor"/>
+              <rect x="2" y="16" width="6" height="6" rx="1.5" fill="currentColor"/>
+              <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="pm-label">NETS QR</span>
+        </button>
+
+        <button type="button" class="payment-method-btn paypal" data-method="paypal">
+          <span class="pm-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <rect width="24" height="24" rx="6" fill="#ffc439"/>
+              <path d="M9 7H17C18.1 7 19 7.9 19 9V11C19 12.1 18.1 13 17 13H9V7Z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="pm-label">PayPal</span>
+        </button>
+        <button type="button" class="payment-method-btn paypal-card" data-method="paypal-card">
+          <span class="pm-icon">
+            <svg width="24" height="24" fill="none">
+              <rect width="24" height="24" rx="6" fill="#0b2140"/>
+              <path d="M8 9h8v6H8z" stroke="#fff" stroke-width="1.5" fill="none"/>
+              <path d="M10 11h6" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="pm-label">DEBIT OR CREDIT CARD</span>
         </button>
       </div>
 
@@ -42,19 +95,27 @@
           <img id="nets-qr-image" alt="NETS QR code" />
         </div>
         <div class="subtle-text">Time remaining: <span id="nets-qr-timer">0:00</span></div>
+        <button type="button" class="btn btn-success btn-sm mt-2" id="nets-qr-retry" hidden>Retry NETS QR</button>
       </div>
 
-      <div class="paypal-label">PayPal</div>
-      <div id="paypal-status" class="subtle-text mt-2"></div>
-      <% if (paypalClientId) { %>
-        <div id="paypal-button-container" class="mt-2"></div>
-      <% } else { %>
-        <div class="toast error mt-2">Missing PayPal client ID in .env</div>
-      <% } %>
+      <div class="store-credit-panel mt-3" id="payment-store-credit-panel" hidden>
+        <div class="store-credit-balance mb-1">
+          Balance: $<%= (walletBalance || 0).toFixed(2) %>
+        </div>
+        <div class="d-flex gap-2">
+          <input id="payment-store-credit-password" type="password" class="form-control" placeholder="Enter password" />
+          <button type="button" class="btn btn-primary" id="payment-store-credit-submit">Pay with store credit</button>
+        </div>
+        <div class="subtle-text text-muted mt-1">Enter your wallet password to authorize the payment.</div>
+      </div>
+
+      <button type="button" class="btn proceed-btn w-100 mt-3" id="payment-proceed">
+        Proceed with selected payment
+      </button>
     </div>
 
-    <div>
-      <div class="summary-card">
+    <div class="summary-rail">
+      <div class="summary-card summary-highlight">
         <h4>Order summary</h4>
         <div class="summary-row">
           <span>Items</span>
@@ -66,90 +127,33 @@
         </div>
       </div>
 
-      <table class="table-modern mt-3">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Qty</th>
-            <th>Price</th>
-            <th>Subtotal</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% pending.cart.forEach(item => { %>
+      <div class="summary-card table-card">
+        <table class="table-modern">
+          <thead>
             <tr>
-              <td><strong><%= item.productName %></strong></td>
-              <td><%= item.quantity %></td>
-              <td>$<%= Number(item.price || 0).toFixed(2) %></td>
-              <td>$<%= (Number(item.price || 0) * item.quantity).toFixed(2) %></td>
+              <th>Product</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Subtotal</th>
             </tr>
-          <% }) %>
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            <% pending.cart.forEach(item => { %>
+              <tr>
+                <td><strong><%= item.productName %></strong></td>
+                <td><%= item.quantity %></td>
+                <td>$<%= Number(item.price || 0).toFixed(2) %></td>
+                <td>$<%= (Number(item.price || 0) * item.quantity).toFixed(2) %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>
 
 <script src="https://unpkg.com/event-source-polyfill"></script>
-<% if (paypalClientId) { %>
-  <script src="https://www.paypal.com/sdk/js?client-id=<%= paypalClientId %>&currency=SGD"></script>
-  <script>
-    const statusEl = document.getElementById('paypal-status');
-    const paypalContainer = document.getElementById('paypal-button-container');
-    const setStatus = (message, isError) => {
-      statusEl.textContent = message;
-      statusEl.className = isError ? 'subtle-text text-danger mt-2' : 'subtle-text mt-2';
-    };
-
-    const persistMethod = (method) => {
-      return fetch('/payment/method', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method })
-      }).then(res => res.json());
-    };
-
-    const paypalButtons = paypal.Buttons({
-      createOrder: () => {
-        return persistMethod('paypal').then((saved) => {
-          if (!saved || !saved.success) {
-            throw new Error(saved && saved.error ? saved.error : 'Unable to save payment method.');
-          }
-          return fetch('/paypal/create-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          }).then(res => res.json()).then(data => {
-            if (!data || !data.id) {
-              throw new Error(data && data.error ? data.error : 'Unable to create PayPal order.');
-            }
-            return data.id;
-          });
-        });
-      },
-      onApprove: (data) => {
-        setStatus('Processing payment...');
-        return fetch('/paypal/capture-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: data.orderID })
-        }).then(res => res.json()).then(payload => {
-          if (!payload || !payload.success) {
-            throw new Error(payload && payload.error ? payload.error : 'Payment failed.');
-          }
-          window.location.href = `/orders/${payload.orderId}`;
-        });
-      },
-      onError: () => {
-        setStatus('PayPal error. Please try again.', true);
-      }
-    });
-
-    if (paypalContainer) {
-      paypalButtons.render('#paypal-button-container');
-    }
-  </script>
-<% } %>
-
 <script>
   const netsButton = document.getElementById('nets-qr-button');
   const netsPanel = document.getElementById('nets-qr-panel');
@@ -159,13 +163,14 @@
   const netsCancel = document.getElementById('nets-qr-cancel');
   let netsTimerInterval = null;
   let netsEventSource = null;
-  let netsTxnRef = null;
   let netsRequestInFlight = false;
 
-  const setNetsStatus = (message, isError) => {
+  const netsRetry = document.getElementById('nets-qr-retry');
+  const setNetsStatus = (message, isError, showRetry = false) => {
     if (!netsStatus) return;
     netsStatus.textContent = message;
     netsStatus.className = isError ? 'subtle-text text-danger mb-2' : 'subtle-text mb-2';
+    if (netsRetry) netsRetry.hidden = !showRetry;
   };
 
   const clearNetsTimer = () => {
@@ -185,7 +190,6 @@
   const startNetsSse = (txnRetrievalRef) => {
     if (!txnRetrievalRef || typeof EventSourcePolyfill === 'undefined') return;
     closeNetsSse();
-    netsTxnRef = txnRetrievalRef;
     const url = `/sse/payment-status/${txnRetrievalRef}`;
     netsEventSource = new EventSourcePolyfill(url, { heartbeatTimeout: 150000 });
 
@@ -202,9 +206,9 @@
         window.location.href = `/nets-qr/success?txn_retrieval_ref=${txnRetrievalRef}`;
       } else if (payload && payload.fail) {
         closeNetsSse();
-        setNetsStatus('NETS payment failed. Please try again.', true);
+      setNetsStatus('NETS payment failed. Please try again.', true, true);
       } else if (payload && payload.error) {
-        setNetsStatus('NETS status error. Please try again.', true);
+      setNetsStatus('NETS status error. Please try again.', true, true);
       }
     });
   };
@@ -222,7 +226,7 @@
       if (remaining <= 0) {
         clearNetsTimer();
         closeNetsSse();
-        setNetsStatus('Transaction timed out. Please try again.', true);
+      setNetsStatus('Transaction timed out. Please try again.', true, true);
       }
     };
     tick();
@@ -237,6 +241,7 @@
     if (netsRequestInFlight) return;
     netsRequestInFlight = true;
     showNetsPanel();
+    if (netsRetry) netsRetry.hidden = true;
     setNetsStatus('Generating NETS QR code...');
 
     fetch('/payment/method', {
@@ -250,7 +255,7 @@
       });
     }).then(res => res.json()).then((data) => {
       if (!data || !data.success) {
-        setNetsStatus(data && (data.errorMsg || data.error) ? (data.errorMsg || data.error) : 'Unable to generate NETS QR.', true);
+      setNetsStatus(data && (data.errorMsg || data.error) ? (data.errorMsg || data.error) : 'Unable to generate NETS QR.', true, true);
         return;
       }
 
@@ -271,18 +276,207 @@
       clearNetsTimer();
       if (netsPanel) netsPanel.hidden = true;
       setNetsStatus('NETS QR cancelled. Choose another payment method.');
+      if (netsRetry) netsRetry.hidden = true;
     });
   }
 
-  if (netsButton) {
-    netsButton.addEventListener('click', () => {
-      requestNetsQr();
+  netsRetry?.addEventListener('click', () => {
+    requestNetsQr();
+  });
+
+  const storePanel = document.getElementById('payment-store-credit-panel');
+  const storeInput = document.getElementById('payment-store-credit-password');
+  const storeSubmit = document.getElementById('payment-store-credit-submit');
+  const proceedButton = document.getElementById('payment-proceed');
+  const selectedLabel = document.getElementById('selected-method-label');
+
+  const methodButtons = Array.from(document.querySelectorAll('.payment-method-btn[data-method]'));
+  const methodLabels = {
+    store_credit: 'Store credit (wallet)',
+    paynow: 'Stripe (PayNow)',
+    grabpay: 'Stripe (Grab)',
+    nets: 'NETS QR',
+    paypal: 'PayPal',
+    'paypal-card': 'PayPal Debit/Credit'
+  };
+  let selectedMethod = 'store_credit';
+
+  const highlightMethodButton = (method) => {
+    methodButtons.forEach(btn => {
+      const btnMethod = (btn.dataset.method || '').toLowerCase();
+      btn.classList.toggle('is-selected', btnMethod === method);
     });
-  }
+  };
+
+  const updateSelectedLabel = (method) => {
+    if (!selectedLabel) return;
+    selectedLabel.textContent = methodLabels[method] || method.toUpperCase();
+  };
+
+  const persistMethod = async (method) => {
+    try {
+      const response = await fetch('/payment/method', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method })
+      });
+      return response.ok;
+    } catch (err) {
+      console.error('Failed to persist payment method:', err);
+      return false;
+    }
+  };
+
+  const toggleStorePanel = (show) => {
+    if (!storePanel) return;
+    storePanel.hidden = !show;
+    if (show && storeInput) {
+      storeInput.value = '';
+      storeInput.focus();
+    }
+  };
+
+  const submitStoreCredit = async (password) => {
+    if (!password) {
+      alert('Password is required to use store credit.');
+      storeInput?.focus();
+      return;
+    }
+    storeSubmit?.setAttribute('disabled', 'disabled');
+    try {
+      const response = await fetch('/payment/store-credit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to process store credit payment.');
+      if (data.orderId) {
+        window.location.href = `/orders/${data.orderId}`;
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Store credit payment failed:', err);
+      alert(err.message || 'Unable to use store credit right now.');
+    } finally {
+      storeSubmit?.removeAttribute('disabled');
+    }
+  };
+
+  const startPayPalFlow = async () => {
+    try {
+      await persistMethod('paypal');
+      const response = await fetch('/paypal/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: selectedMethod === 'paypal-card' ? 'card' : 'paypal' })
+      });
+      const data = await response.json();
+      if (!response.ok || !data || !data.url) {
+        throw new Error(data && data.error ? data.error : 'Unable to start PayPal checkout.');
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      console.error('PayPal checkout initialization failed:', err);
+      alert(err.message || 'Unable to start PayPal checkout.');
+    }
+  };
+
+  const startPayNowFlow = async () => {
+    try {
+      await persistMethod('paynow');
+      const response = await fetch('/payment/paynow', {
+        method: 'POST'
+      });
+      const data = await response.json();
+      if (!response.ok || !data || !data.url) {
+        throw new Error(data && data.error ? data.error : 'Unable to start PayNow checkout.');
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      console.error('PayNow initialization failed:', err);
+      alert(err.message || 'Unable to start PayNow checkout.');
+    }
+  };
+
+  const startGrabPayFlow = async () => {
+    try {
+      await persistMethod('grabpay');
+      const response = await fetch('/stripe/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variant: 'grabpay' })
+      });
+      const data = await response.json();
+      if (!response.ok || !data || !data.url) {
+        throw new Error(data && data.error ? data.error : 'Unable to start GrabPay checkout.');
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      console.error('GrabPay checkout initialization failed:', err);
+      alert(err.message || 'Unable to start GrabPay checkout.');
+    }
+  };
+
+  const selectMethod = (method) => {
+    if (!method) return;
+    selectedMethod = method;
+    highlightMethodButton(method);
+    updateSelectedLabel(method);
+    toggleStorePanel(false);
+    if (netsPanel) netsPanel.hidden = true;
+    persistMethod(method);
+  };
+
+  methodButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const method = (btn.dataset.method || '').toLowerCase();
+      selectMethod(method);
+    });
+  });
+
+  const handleProceed = () => {
+    if (!selectedMethod) {
+      alert('Select a payment method first.');
+      return;
+    }
+    if (selectedMethod === 'store_credit') {
+      toggleStorePanel(true);
+      return;
+    }
+    if (selectedMethod === 'nets') {
+      requestNetsQr();
+      return;
+    }
+    if (selectedMethod === 'paypal') {
+      startPayPalFlow();
+      return;
+    }
+    if (selectedMethod === 'paynow') {
+      startPayNowFlow();
+      return;
+    }
+    if (selectedMethod === 'grabpay') {
+      startGrabPayFlow();
+      return;
+    }
+  };
+
+  proceedButton?.addEventListener('click', handleProceed);
+  storeSubmit?.addEventListener('click', () => submitStoreCredit(storeInput?.value || ''));
+  storeInput?.addEventListener('keydown', (evt) => {
+    if (evt.key === 'Enter') {
+      evt.preventDefault();
+      submitStoreCredit(storeInput.value);
+    }
+  });
 
   const params = new URLSearchParams(window.location.search);
   if (params.get('autoNets') === '1') {
-    requestNetsQr();
+    selectMethod('nets');
+  } else {
+    selectMethod('store_credit');
   }
 </script>
 

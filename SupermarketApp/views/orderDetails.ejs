@@ -28,6 +28,27 @@
       <% success.forEach(msg => { %><div><%= msg %></div><% }) %>
     </div>
   <% } %>
+  <% const orderPaymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
+  <% const paymentLabel = orderPaymentMethod === 'paypal' ? 'PAYPAL' : orderPaymentMethod === 'stripe' ? 'STRIPE' : orderPaymentMethod === 'grabpay' ? 'STRIPE (GRAB)' : orderPaymentMethod === 'card' ? 'CARD' : orderPaymentMethod === 'paynow' ? 'PAYNOW' : orderPaymentMethod === 'nets' ? 'NETS QR' : orderPaymentMethod === 'store_credit' ? 'STORE CREDIT' : 'UNPAID'; %>
+  <% let paymentSummary = null;
+     try {
+       paymentSummary = order.payment_summary ? JSON.parse(order.payment_summary) : null;
+     } catch (e) {
+       paymentSummary = null;
+     }
+  %>
+  <% if (user && user.role !== 'admin' && Array.isArray(refunds)) { %>
+    <% const approvedRefunds = refunds.filter(r => {
+      const s = String(r.status || '').toLowerCase();
+      return s === 'approved' || s === 'processed';
+    }); %>
+    <% const totalApproved = approvedRefunds.reduce((sum, r) => sum + (Number(r.amount) || 0), 0); %>
+    <% if (totalApproved > 0) { %>
+      <div class="toast success mb-3 refund-toast">
+        Refund approved. $<%= totalApproved.toFixed(2) %> credited to your STORE CREDIT wallet.
+      </div>
+    <% } %>
+  <% } %>
 
   <div class="split-layout">
     <div class="summary-card">
@@ -35,8 +56,6 @@
         const s = String(r.status || '').toLowerCase();
         return s === 'approved' || s === 'processed';
       }); %>
-      <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
-      <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
       <h4>Total Paid</h4>
       <p class="summary-total">$<%= order.total.toFixed(2) %></p>
       <div class="summary-row">
@@ -61,33 +80,124 @@
           <span class="status-pill"><%= order.shipping_status %></span>
         </div>
       <% } %>
+      <% if (user && user.role === 'admin' && paymentSummary && Array.isArray(paymentSummary.records) && paymentSummary.records.length) { %>
+        <div class="note-card mt-3 text-start">
+          <strong>Payment breakdown</strong>
+          <ul class="mb-0 ps-3">
+            <% paymentSummary.records.forEach(record => { %>
+              <li>
+                <%= (record.method || 'Unknown').toUpperCase() %>
+                — $<%= Number(record.amount || 0).toFixed(2) %>
+                <% if (record.meta && record.meta.sessionId) { %>
+                  <span class="subtle-text"> (session <%= record.meta.sessionId %>)</span>
+                <% } %>
+              </li>
+            <% }) %>
+          </ul>
+          <% if (paymentSummary.fraud) { %>
+            <div class="subtle-text mt-2">
+              Fraud score: <%= paymentSummary.fraud.score %> (<%= paymentSummary.fraud.severity %>)
+            </div>
+            <% if (paymentSummary.fraud.reasons && paymentSummary.fraud.reasons.length) { %>
+              <div class="subtle-text">Flags: <%= paymentSummary.fraud.reasons.join(', ') %></div>
+            <% } %>
+          <% } %>
+        </div>
+      <% } %>
       <div class="summary-row">
         <span>Items</span>
         <span><%= order.items.length %></span>
       </div>
-      <% if (user && user.role === 'admin') { %>
-        <% if (ownerDeleted) { %>
-          <div class="note-card mt-3">
-            <strong>Read-only</strong>
-            <div class="subtle-text mb-0">This order belongs to a deleted account. Viewing only; updates are disabled.</div>
-          </div>
-        <% } else { %>
-          <form action="/orders/<%= order.id %>/status" method="POST" class="mt-3 d-grid gap-2">
-            <label class="form-label" for="status">Order status</label>
-            <select class="form-select" id="status" name="status">
-              <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
-              <option value="delivered" <%= status === 'delivered' ? 'selected' : '' %>>Delivered</option>
-            </select>
-            <label class="form-label" for="shipping_status">Shipping status</label>
-            <select class="form-select" id="shipping_status" name="shipping_status">
-              <option value="processing" <%= (order.shipping_status || '').toLowerCase() === 'processing' ? 'selected' : '' %>>Processing</option>
-              <option value="shipped" <%= (order.shipping_status || '').toLowerCase() === 'shipped' ? 'selected' : '' %>>Shipped</option>
-              <option value="delivered" <%= (order.shipping_status || '').toLowerCase() === 'delivered' ? 'selected' : '' %>>Delivered</option>
-            </select>
-            <button type="submit" class="btn btn-primary">Update status</button>
-          </form>
+        <% if (user && user.role === 'admin') { %>
+          <% if (ownerDeleted) { %>
+            <div class="note-card mt-3">
+              <strong>Read-only</strong>
+              <div class="subtle-text mb-0">This order belongs to a deleted account. Viewing only; updates are disabled.</div>
+            </div>
+          <% } else { %>
+            <form action="/orders/<%= order.id %>/status" method="POST" class="mt-3 d-grid gap-2">
+              <label class="form-label" for="status">Order status</label>
+              <select class="form-select" id="status" name="status">
+                <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
+                <option value="delivered" <%= status === 'delivered' ? 'selected' : '' %>>Delivered</option>
+              </select>
+              <label class="form-label" for="shipping_status">Shipping status</label>
+              <select class="form-select" id="shipping_status" name="shipping_status">
+                <option value="processing" <%= (order.shipping_status || '').toLowerCase() === 'processing' ? 'selected' : '' %>>Processing</option>
+                <option value="shipped" <%= (order.shipping_status || '').toLowerCase() === 'shipped' ? 'selected' : '' %>>Shipped</option>
+                <option value="delivered" <%= (order.shipping_status || '').toLowerCase() === 'delivered' ? 'selected' : '' %>>Delivered</option>
+              </select>
+              <button type="submit" class="btn btn-primary">Update status</button>
+            </form>
+            <% const adminPaymentKey = order.payment_method ? order.payment_method.toLowerCase() : 'unpaid'; %>
+            <% const supportsOriginalAdmin = ['paypal','paypal-card','paynow','grabpay','stripe'].includes(adminPaymentKey); %>
+            <% const adminDestinations = supportsOriginalAdmin ? [{ value: 'original', label: 'Original payment method' }] : []; %>
+            <% adminDestinations.push({ value: 'store_credit', label: 'Store credit wallet' }); %>
+            <form action="/orders/<%= order.id %>/refund" method="POST" class="mt-4 d-grid gap-2">
+              <h5>Process a refund</h5>
+              <label class="form-label" for="refundModeAdmin">Refund type</label>
+              <div class="d-flex gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="refundMode" id="refundModeAdmin-full" value="full" checked>
+                  <label class="form-check-label" for="refundModeAdmin-full">Full refund</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="refundMode" id="refundModeAdmin-partial" value="partial">
+                  <label class="form-check-label" for="refundModeAdmin-partial">Partial refund</label>
+                </div>
+              </div>
+              <label class="form-label mt-2" for="refundAmountAdmin">Refund amount (≤ $<%= order.total.toFixed(2) %>)</label>
+              <input
+                class="form-control"
+                type="number"
+                min="0.01"
+                step="0.01"
+                id="refundAmountAdmin"
+                name="amount"
+                value="<%= order.total.toFixed(2) %>"
+                max="<%= order.total.toFixed(2) %>"
+                required
+              >
+              <label class="form-label mt-2">Refund destination</label>
+              <div class="d-flex gap-2 align-items-center">
+                <% adminDestinations.forEach(dest => { %>
+                  <div class="form-check">
+                    <input
+                      class="form-check-input"
+                      type="radio"
+                      name="destination"
+                      id="refundDestinationAdmin-<%= dest.value %>"
+                      value="<%= dest.value %>"
+                      <%= dest.value === 'store_credit' ? 'checked' : '' %>
+                    >
+                    <label class="form-check-label" for="refundDestinationAdmin-<%= dest.value %>">
+                      <%= dest.label %>
+                    </label>
+                  </div>
+                <% }) %>
+              </div>
+              <label class="form-label mt-2" for="refundReasonAdmin">Reason</label>
+              <select class="form-select" id="refundReasonAdmin" name="reason" required>
+                <option value="" selected disabled>Select a reason</option>
+                <option value="Wrong item received">Wrong item received</option>
+                <option value="Item damaged or defective">Item damaged or defective</option>
+                <option value="Delivery delay">Delivery delay</option>
+                <option value="Changed my mind">Changed my mind</option>
+                <option value="other">Other</option>
+              </select>
+              <textarea
+                class="form-control"
+                id="refundReasonOtherAdmin"
+                name="reasonOther"
+                rows="2"
+                placeholder="Please describe (required for Other)"
+                hidden
+                required
+              ></textarea>
+              <button type="submit" class="btn btn-outline-primary">Issue refund</button>
+            </form>
+          <% } %>
         <% } %>
-      <% } %>
       <% if (order.notes) { %>
         <% const noteLines = (order.notes || '').split(/\n/).filter(Boolean); %>
         <div class="note-card mt-3 text-start">
@@ -105,18 +215,48 @@
         <% const hasPending = Array.isArray(refunds) && refunds.some(r => (r.status || '').toLowerCase() === 'pending'); %>
         <form action="/orders/<%= order.id %>/refund-request" method="POST" class="mt-3 d-grid gap-2">
           <label class="form-label" for="refundReasonUser">Request a refund (full order amount: $<%= order.total.toFixed(2) %>)</label>
-          <textarea class="form-control" id="refundReasonUser" name="reason" rows="2" placeholder="Reason (required)" <%= hasPending ? 'disabled' : '' %> required></textarea>
+          <select class="form-select" id="refundReasonUser" name="reason" <%= hasPending ? 'disabled' : '' %> required>
+            <option value="" selected disabled>Select a reason</option>
+            <option value="Wrong item received">Wrong item received</option>
+            <option value="Item damaged or defective">Item damaged or defective</option>
+            <option value="Delivery delay">Delivery delay</option>
+            <option value="Changed my mind">Changed my mind</option>
+            <option value="other">Other</option>
+          </select>
+          <div class="subtle-text text-warning">
+            Refunds for PayPal (including credit/debit), Stripe GrabPay, and Stripe PayNow may be issued back to the original method or into your Store Credit wallet (other payment methods default to Store Credit).
+          </div>
+          <textarea class="form-control" id="refundReasonOther" name="reasonOther" rows="2" placeholder="Please describe (required for Other)" hidden <%= hasPending ? 'disabled' : '' %>></textarea>
           <button type="submit" class="btn btn-primary" <%= hasPending ? 'disabled' : '' %>>
             <%= hasPending ? 'Pending refund request' : 'Submit refund request' %>
           </button>
+          <% const paymentMethodKey = order.payment_method ? order.payment_method.toLowerCase() : 'unpaid'; %>
+          <% const supportsOriginalRefund = ['paypal','paypal-card','paynow','grabpay','stripe'].includes(paymentMethodKey); %>
+          <% const refundDestinations = []; %>
+          <% const destPreference = refundDestination || (supportsOriginalRefund ? 'original' : 'store_credit'); %>
+          <% if (supportsOriginalRefund) { refundDestinations.push({ value: 'original', label: 'Original payment method' }); } %>
+          <% refundDestinations.push({ value: 'store_credit', label: 'Store credit wallet' }); %>
+          <label class="form-label mt-2" for="refundDestination">Refund destination</label>
+          <div class="d-flex gap-2 align-items-center">
+            <% refundDestinations.forEach(dest => { %>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="refundDestination" id="refundDestination-<%= dest.value %>" value="<%= dest.value %>"
+                  <%= dest.value === destPreference ? 'checked' : '' %>>
+                <label class="form-check-label" for="refundDestination-<%= dest.value %>">
+                  <%= dest.label %>
+                </label>
+              </div>
+            <% }) %>
+          </div>
           <% if (hasPending) { %>
             <div class="subtle-text">A refund request is already pending for this order.</div>
           <% } %>
         </form>
       <% } %>
-      <% if (user) { %>
-        <a class="btn btn-secondary w-100 mt-2" href="/orders/<%= order.id %>/invoice">View invoice</a>
-      <% } %>
+      <!-- Payment options removed to keep history view focused on order details -->
+    <% if (user) { %>
+      <a class="btn btn-secondary w-100 mt-2" href="/orders/<%= order.id %>/invoice">View invoice</a>
+    <% } %>
 
       <% if (typeof refunds !== 'undefined' && refunds.length) { %>
         <div class="mt-3">
@@ -125,11 +265,14 @@
             <% refunds.forEach(r => { %>
               <% const rs = (r.status || '').toLowerCase(); %>
               <% const statusClass = rs === 'pending' ? 'warning' : (rs === 'rejected' ? 'danger' : 'success'); %>
-              <li class="d-flex align-items-center gap-2">
-                <span>Refund #<%= r.id %> - $<%= Number(r.amount || 0).toFixed(2) %></span>
-                <span class="status-pill <%= statusClass %>"><%= (r.status || '').toUpperCase() %></span>
-                <span><%= r.reason || 'No reason provided' %></span>
-              </li>
+            <li class="d-flex align-items-center gap-2">
+              <span>Refund #<%= r.id %> - $<%= Number(r.amount || 0).toFixed(2) %></span>
+              <span class="status-pill <%= statusClass %>"><%= (r.status || '').toUpperCase() %></span>
+              <span class="subtle-text text-muted">
+                <%= (r.destination || 'store_credit') === 'original' ? 'Original payment method' : 'Store credit' %>
+              </span>
+              <span><%= r.reason || 'No reason provided' %></span>
+            </li>
             <% }) %>
           </ul>
         </div>
@@ -182,5 +325,49 @@
     </div>
   <% } %>
 </section>
+
+<script>
+  const refundReasonSelect = document.getElementById('refundReasonUser');
+  const refundReasonOther = document.getElementById('refundReasonOther');
+  if (refundReasonSelect && refundReasonOther) {
+    const toggleOther = () => {
+      const isOther = refundReasonSelect.value === 'other';
+      refundReasonOther.hidden = !isOther;
+      refundReasonOther.required = isOther;
+      if (!isOther) refundReasonOther.value = '';
+    };
+    refundReasonSelect.addEventListener('change', toggleOther);
+    toggleOther();
+  }
+  const refundReasonAdminSelect = document.getElementById('refundReasonAdmin');
+  const refundReasonAdminOther = document.getElementById('refundReasonOtherAdmin');
+  if (refundReasonAdminSelect && refundReasonAdminOther) {
+    const toggleAdminOther = () => {
+      const isAdminOther = refundReasonAdminSelect.value === 'other';
+      refundReasonAdminOther.hidden = !isAdminOther;
+      refundReasonAdminOther.required = isAdminOther;
+      if (!isAdminOther) refundReasonAdminOther.value = '';
+    };
+    refundReasonAdminSelect.addEventListener('change', toggleAdminOther);
+    toggleAdminOther();
+  }
+  const refundAmountAdmin = document.getElementById('refundAmountAdmin');
+  const refundModeFull = document.getElementById('refundModeAdmin-full');
+  const refundModePartial = document.getElementById('refundModeAdmin-partial');
+  if (refundAmountAdmin && refundModeFull && refundModePartial) {
+    const totalValue = Number(<%= order.total.toFixed(2) %>);
+    const handleMode = () => {
+      if (refundModeFull.checked) {
+        refundAmountAdmin.value = totalValue.toFixed(2);
+        refundAmountAdmin.setAttribute('readonly', 'readonly');
+      } else {
+        refundAmountAdmin.removeAttribute('readonly');
+      }
+    };
+    refundModeFull.addEventListener('change', handleMode);
+    refundModePartial.addEventListener('change', handleMode);
+    handleMode();
+  }
+</script>
 
 <%- include('partials/footer') %>

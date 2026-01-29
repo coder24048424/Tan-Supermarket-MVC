@@ -2,6 +2,78 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  (function () {
+    const showToast = (type, message) => {
+      const main = document.querySelector('.app-main');
+      if (!main) return;
+      const toast = document.createElement('div');
+      toast.className = `toast ${type} mb-3`;
+      toast.textContent = message;
+      main.prepend(toast);
+      setTimeout(() => {
+        toast.remove();
+      }, 4000);
+    };
+
+    const updateCartBadge = (count) => {
+      const badge = document.querySelector('.cart-badge');
+      if (badge) {
+        badge.textContent = count;
+      } else if (count > 0) {
+        const cartBtn = document.querySelector('.cart-btn');
+        if (cartBtn) {
+          const newBadge = document.createElement('span');
+          newBadge.className = 'cart-badge';
+          newBadge.textContent = count;
+          cartBtn.appendChild(newBadge);
+        }
+      }
+    };
+
+    document.addEventListener('submit', (event) => {
+      const form = event.target;
+      if (!form || !form.matches('form[data-ajax-cart="true"]')) return;
+
+      event.preventDefault();
+      const formData = new FormData(form);
+      const body = new URLSearchParams();
+      for (const [key, value] of formData.entries()) {
+        body.append(key, value);
+      }
+      fetch(form.action, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body
+      }).then(async (res) => {
+        let data = null;
+        try {
+          data = await res.json();
+        } catch (err) {
+          data = null;
+        }
+        return { ok: res.ok, data };
+      }).then(({ ok, data }) => {
+        if (data && data.success) {
+          showToast('success', data.message || 'Item added to cart.');
+        } else if (!data && ok) {
+          showToast('success', 'Item added to cart.');
+        } else {
+          showToast('error', data && data.message ? data.message : 'Unable to add item.');
+        }
+        if (data && typeof data.cartCount === 'number') {
+          updateCartBadge(data.cartCount);
+        }
+      }).catch(() => {
+        showToast('error', 'Unable to add item.');
+      });
+    });
+  })();
+</script>
 <%- typeof extraScripts !== 'undefined' ? extraScripts : '' %>
 </body>
 </html>

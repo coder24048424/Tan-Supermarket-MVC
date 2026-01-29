@@ -27,7 +27,7 @@
       <tbody>
         <% orders.forEach(order => { %>
           <% const paymentMethod = (order.payment_method || 'unpaid').toLowerCase(); %>
-          <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : 'Unpaid'; %>
+          <% const paymentLabel = paymentMethod === 'paypal' ? 'PayPal' : paymentMethod === 'stripe' ? 'Stripe' : paymentMethod === 'grabpay' ? 'Stripe (Grab)' : paymentMethod === 'card' ? 'Card' : paymentMethod === 'paynow' ? 'PayNow' : paymentMethod === 'nets' ? 'NETS QR' : paymentMethod === 'store_credit' ? 'STORE CREDIT' : 'Unpaid'; %>
           <tr>
             <td>#<%= order.id %></td>
             <td><%= order.created_at.toLocaleString() %></td>

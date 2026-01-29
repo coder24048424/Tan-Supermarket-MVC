@@ -95,6 +95,85 @@ CREATE TABLE `orders` (
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+--
+-- Table structure for table `wallets`
+--
+
+DROP TABLE IF EXISTS `wallets`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wallets` (
+  `user_id` int NOT NULL,
+  `balance` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`),
+  CONSTRAINT `fk_wallet_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `wallet_transactions`
+--
+
+DROP TABLE IF EXISTS `wallet_transactions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `wallet_transactions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `method` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `status` varchar(32) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'completed',
+  `provider_ref` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_wallet_tx_user` (`user_id`),
+  CONSTRAINT `fk_wallet_tx_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `refunds`
+--
+
+DROP TABLE IF EXISTS `refunds`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `refunds` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `order_id` int NOT NULL,
+  `amount` double(10,2) NOT NULL,
+  `approved_amount` double(10,2) DEFAULT NULL,
+  `reason` text COLLATE utf8mb4_general_ci,
+  `destination` varchar(32) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'store_credit',
+  `status` varchar(32) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `fk_refunds_order` (`order_id`),
+  CONSTRAINT `fk_refunds_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `notifications`
+--
+
+DROP TABLE IF EXISTS `notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `notifications` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `title` varchar(120) COLLATE utf8mb4_general_ci NOT NULL,
+  `message` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'unread',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_notifications_user` (`user_id`),
+  CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 
 --
 -- Dumping data for table `orders`
@@ -120,9 +199,11 @@ CREATE TABLE `transactions` (
   `orderId` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
   `payerId` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
   `payerEmail` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `payerName` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `amount` decimal(10,2) NOT NULL,
   `currency` varchar(8) COLLATE utf8mb4_general_ci NOT NULL,
   `status` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `method` varchar(32) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'UNKNOWN',
   `time` datetime NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
