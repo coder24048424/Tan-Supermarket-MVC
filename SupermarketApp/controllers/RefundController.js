@@ -364,7 +364,14 @@ function RefundController() {
         };
         const processStatusChange = () => {
           refund.approved_amount = finalAmount;
-          performOriginalRefund().then(() => {
+          performOriginalRefund().catch((refundErr) => {
+            const code = refundErr && (refundErr.code || (refundErr.raw && refundErr.raw.code));
+            const alreadyRefunded = code === 'charge_already_refunded' || code === 'refund_already_processed';
+            if (alreadyRefunded) {
+              return;
+            }
+            return Promise.reject(refundErr);
+          }).then(() => {
             RefundModel.updateRefundStatus(refundId, status, (err) => {
               if (err) {
                 console.error('Failed to update refund status:', err);
@@ -374,8 +381,8 @@ function RefundController() {
               restockAndFinalize();
             });
           }).catch(refundErr => {
-            console.error('Failed to refund PayPal capture:', refundErr);
-            req.flash('error', `Unable to process PayPal refund: ${refundErr.message || refundErr}`);
+            console.error('Failed to process original refund:', refundErr);
+            req.flash('error', `Unable to process original refund: ${refundErr.message || refundErr}`);
             return res.redirect('/admin/refunds');
           });
         };
