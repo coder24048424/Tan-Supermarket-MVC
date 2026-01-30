@@ -207,12 +207,17 @@ function RefundController() {
         return res.redirect('/orders');
       }
 
+      const rawRedirect = req.body && req.body.redirectTo;
+      const redirectTarget = (typeof rawRedirect === 'string' && rawRedirect.startsWith('/'))
+        ? rawRedirect
+        : '/admin/refunds';
+
       const refundId = parseInt(req.params.id, 10);
       const { status } = req.body;
 
       if (Number.isNaN(refundId) || !status) {
         req.flash('error', 'Invalid refund update.');
-        return res.redirect('/admin/refunds');
+        return res.redirect(redirectTarget);
       }
 
       const normalizedStatus = String(status).toLowerCase();
@@ -222,18 +227,18 @@ function RefundController() {
       RefundModel.getRefundById(refundId, (findErr, refund) => {
         if (findErr || !refund) {
           req.flash('error', 'Refund not found.');
-          return res.redirect('/admin/refunds');
+          return res.redirect(redirectTarget);
         }
 
         OrdersModel.getOrderById(refund.order_id, null, (orderErr, order) => {
           if (orderErr || !order) {
             req.flash('error', 'Order not found for this refund.');
-            return res.redirect('/admin/refunds');
+            return res.redirect(redirectTarget);
           }
 
           if (String(order.owner_role || '').toLowerCase() === 'deleted') {
             req.flash('error', 'This order belongs to a deleted account and is read-only.');
-            return res.redirect('/admin/refunds');
+            return res.redirect(redirectTarget);
           }
 
         const alreadyApproved = ['approved', 'processed'].includes(String(refund.status).toLowerCase());
@@ -248,15 +253,26 @@ function RefundController() {
             : Math.min(requestedAmount, orderTotal);
           if (candidate <= 0) {
             req.flash('error', 'Refund amount must be greater than zero.');
-            return res.redirect('/admin/refunds');
+            return res.redirect(redirectTarget);
           }
           finalAmount = candidate;
         }
         let captureId = null;
         let paymentIntentId = null;
+        const paymentMethods = {};
+        const orderMethod = String(order.payment_method || '').toLowerCase();
+        let originalMethod = null;
         try {
-          const summary = order.payment_summary ? JSON.parse(order.payment_summary) : {};
+          const summary = order.payment_summary
+            ? (typeof order.payment_summary === 'string' ? JSON.parse(order.payment_summary) : order.payment_summary)
+            : {};
           const records = Array.isArray(summary.records) ? summary.records : [];
+          records.forEach((record) => {
+            const method = String(record && record.method || '').toLowerCase();
+            const amt = Number(record && record.amount || 0);
+            if (!method || !Number.isFinite(amt) || amt <= 0) return;
+            paymentMethods[method] = (paymentMethods[method] || 0) + amt;
+          });
           const paypalRecord = records.find(r => {
             const method = (r.method || '').toLowerCase();
             return method === 'paypal' || method === 'paypal-card';
@@ -270,6 +286,27 @@ function RefundController() {
         } catch (parseErr) {
           console.error('Failed to parse payment summary for refund:', parseErr);
         }
+        if (['paypal', 'paypal-card'].includes(orderMethod)) {
+          originalMethod = 'paypal';
+        } else if (['stripe', 'paynow', 'grabpay'].includes(orderMethod)) {
+          originalMethod = 'stripe';
+        }
+        const maxOriginalAmount = (() => {
+          if (originalMethod === 'paypal') {
+            return (paymentMethods['paypal'] || 0) + (paymentMethods['paypal-card'] || 0);
+          }
+          if (originalMethod === 'stripe') {
+            return (paymentMethods['stripe'] || 0) + (paymentMethods['paynow'] || 0) + (paymentMethods['grabpay'] || 0);
+          }
+          return 0;
+        })();
+        if (isApproval && destination === 'original') {
+          if (maxOriginalAmount <= 0) {
+            req.flash('error', 'Original payment details missing or unavailable for this refund.');
+            return res.redirect(redirectTarget);
+          }
+          finalAmount = Math.min(finalAmount, maxOriginalAmount);
+        }
         const finalizeRefund = () => {
           const amountToUse = Number(refund.approved_amount || refund.amount || 0);
           if (destination !== 'store_credit') {
@@ -280,13 +317,13 @@ function RefundController() {
               message: `Your refund of $${amountToUse.toFixed(2)} will be returned to the ${destinationLabel}.`
             }, () => {});
             logRefundTransaction(order, refund, destinationLabel, amountToUse);
-            return res.redirect('/admin/refunds');
+            return res.redirect(redirectTarget);
           }
             return WalletModel.addFunds(order.user_id, amountToUse, (walletErr, balance) => {
               if (walletErr) {
                 console.error('Failed to credit wallet for refund:', walletErr);
                 req.flash('error', 'Refund approved, but wallet credit failed.');
-                return res.redirect('/admin/refunds');
+                return res.redirect(redirectTarget);
               }
 
               WalletModel.createTransaction({
@@ -308,7 +345,7 @@ function RefundController() {
                 message: `Your refund of $${amountToUse.toFixed(2)} was credited to STORE CREDIT.`
               }, () => {});
               logRefundTransaction(order, refund, destinationLabel, amountToUse);
-              return res.redirect('/admin/refunds');
+              return res.redirect(redirectTarget);
             });
           };
 
@@ -316,7 +353,7 @@ function RefundController() {
           const restockNeeded = isApproval && !alreadyApproved;
           if (!restockNeeded) {
             req.flash('success', 'Refund status updated.');
-            return res.redirect('/admin/refunds');
+            return res.redirect(redirectTarget);
           }
 
           const items = order.items || [];
@@ -337,7 +374,7 @@ function RefundController() {
               if (pendingCount === 0) {
                 if (failed) {
                   req.flash('error', 'Refund approved, but some items failed to restock.');
-                  return res.redirect('/admin/refunds');
+                  return res.redirect(redirectTarget);
                 }
 
                 return finalizeRefund();
@@ -351,6 +388,21 @@ function RefundController() {
             return Promise.resolve();
           }
           const refundAmount = Number(refund.approved_amount || refund.amount || 0);
+          if (originalMethod === 'stripe') {
+            if (paymentIntentId && stripeLib) {
+              return stripeLib.refunds.create({
+                payment_intent: paymentIntentId,
+                amount: Math.round(refundAmount * 100)
+              });
+            }
+            return Promise.reject(new Error('Stripe payment details missing for refund.'));
+          }
+          if (originalMethod === 'paypal') {
+            if (captureId) {
+              return PayPalService.refundCapture(captureId, refundAmount);
+            }
+            return Promise.reject(new Error('PayPal capture details missing for refund.'));
+          }
           if (paymentIntentId && stripeLib) {
             return stripeLib.refunds.create({
               payment_intent: paymentIntentId,
@@ -376,26 +428,26 @@ function RefundController() {
               if (err) {
                 console.error('Failed to update refund status:', err);
                 req.flash('error', 'Could not update refund status.');
-                return res.redirect('/admin/refunds');
+                return res.redirect(redirectTarget);
               }
               restockAndFinalize();
             });
           }).catch(refundErr => {
             console.error('Failed to process original refund:', refundErr);
             req.flash('error', `Unable to process original refund: ${refundErr.message || refundErr}`);
-            return res.redirect('/admin/refunds');
+            return res.redirect(redirectTarget);
           });
         };
 
         if (isApproval) {
           RefundModel.setApprovedAmount(refundId, finalAmount, (setErr) => {
-            if (setErr) {
-              console.error('Failed to set approved refund amount:', setErr);
-              req.flash('error', 'Unable to update refund amount.');
-              return res.redirect('/admin/refunds');
-            }
-            processStatusChange();
-          });
+          if (setErr) {
+            console.error('Failed to set approved refund amount:', setErr);
+            req.flash('error', 'Unable to update refund amount.');
+            return res.redirect(redirectTarget);
+          }
+          processStatusChange();
+        });
         } else {
           processStatusChange();
         }

@@ -1,5 +1,6 @@
 const OrdersModel = require('../models/OrdersModel');
 const RefundModel = require('../models/RefundModel');
+const RefundController = require('./RefundController');
 const ProductModel = require('../models/ProductModel');
 const UserCartModel = require('../models/UserCartModel');
 const WalletModel = require('../models/WalletModel');
@@ -547,14 +548,22 @@ function OrdersController() {
           return res.redirect(`/orders/${orderId}`);
         }
 
-        RefundModel.createRefund(orderId, amount, reason, 'store_credit', (err) => {
+        RefundModel.createRefund(orderId, amount, reason, 'store_credit', (err, result) => {
           if (err) {
             console.error('Failed to create refund:', err);
             req.flash('error', 'Could not create refund request.');
             return res.redirect(`/orders/${orderId}`);
           }
-          req.flash('success', 'Refund recorded.');
-          return res.redirect(`/orders/${orderId}`);
+          const refundId = result && result.insertId ? Number(result.insertId) : null;
+          if (!refundId) {
+            req.flash('success', 'Refund recorded.');
+            return res.redirect(`/orders/${orderId}`);
+          }
+          req.params.id = String(refundId);
+          req.body.status = 'approved';
+          req.body.approvedAmount = amount;
+          req.body.redirectTo = `/orders/${orderId}`;
+          return RefundController.updateStatus(req, res);
         });
       });
     },

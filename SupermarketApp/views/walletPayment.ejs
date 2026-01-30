@@ -13,25 +13,14 @@
     <div class="payment-panel" id="wallet-payment-panel">
       <div class="panel-heading">
         <h4>Payment options</h4>
-        <p class="subtle-text mb-0">Each option opens in a new tab; select store credit to stay here.</p>
+        <p class="subtle-text mb-0">Each option opens in a new tab.</p>
         <div class="selected-method" role="status" aria-live="polite">
           <span class="selected-badge" aria-hidden="true">&#10003;</span>
-          <span id="wallet-selected-method-label">Store credit</span>
+          <span id="wallet-selected-method-label">PayNow</span>
         </div>
       </div>
 
       <div class="payment-methods">
-        <button type="button" class="payment-method-btn store-credit" data-method="store_credit">
-          <span class="pm-icon" aria-hidden="true">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <rect x="6" y="6" width="12" height="12" rx="6" stroke="currentColor" stroke-width="1.6" fill="none"/>
-              <path d="M6 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-              <path d="M9 10h1.5v4H9zM13 10h1.5v4H13z" fill="currentColor"/>
-            </svg>
-          </span>
-          <span class="pm-label">Store credit</span>
-        </button>
-
         <button type="button" class="payment-method-btn paynow" data-method="paynow">
           <span class="pm-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -97,17 +86,6 @@
         </div>
         <div class="subtle-text">Time remaining: <span id="wallet-nets-qr-timer">0:00</span></div>
         <button type="button" class="btn btn-success btn-sm mt-2" id="wallet-nets-qr-retry" hidden>Retry NETS QR</button>
-      </div>
-
-      <div class="store-credit-panel mt-3" id="wallet-store-credit-panel" hidden>
-        <div class="store-credit-balance mb-1">
-          Balance: $<%= (walletBalance || 0).toFixed(2) %>
-        </div>
-        <div class="d-flex gap-2">
-          <input type="password" class="form-control" id="wallet-store-credit-password" placeholder="Enter password"/>
-          <button type="button" class="btn btn-primary" id="wallet-store-credit-submit">Pay with store credit</button>
-        </div>
-        <div class="subtle-text mt-1">Enter your wallet password to authenticate.</div>
       </div>
 
       <button type="button" class="btn proceed-btn w-100 mt-3" id="confirm-topup">
@@ -293,11 +271,11 @@
   const methodButtons = paymentPanel ? Array.from(paymentPanel.querySelectorAll('.payment-method-btn[data-method]')) : [];
   const selectedLabel = document.getElementById('wallet-selected-method-label');
   const confirmTopup = document.getElementById('confirm-topup');
-  const storePanel = document.getElementById('wallet-store-credit-panel');
-  const storeInput = document.getElementById('wallet-store-credit-password');
-  const storeSubmit = document.getElementById('wallet-store-credit-submit');
 
   let selectedWalletMethod = '<%= (selectedMethod || 'paynow') %>'.toLowerCase();
+  if (selectedWalletMethod === 'store_credit') {
+    selectedWalletMethod = 'paynow';
+  }
 
   const setWalletMethodOnServer = async (method) => {
     try {
@@ -325,8 +303,7 @@
       grabpay: 'GrabPay',
       nets: 'NETS QR',
       paypal: 'PayPal',
-      'paypal-card': 'PayPal Debit/Credit',
-      store_credit: 'Store credit (wallet)'
+      'paypal-card': 'PayPal Debit/Credit'
     };
     selectedLabel.textContent = labelMap[method] || method.toUpperCase();
   };
@@ -338,7 +315,6 @@
       selectedWalletMethod = method;
       highlightMethodButton(method);
       updateSelectedLabel(method);
-      if (storePanel) storePanel.hidden = method !== 'store_credit';
       if (netsPanel && method !== 'nets') netsPanel.hidden = true;
       setWalletMethodOnServer(method);
     });
@@ -372,10 +348,6 @@
   const handleProceed = () => {
     if (!selectedWalletMethod) {
       return alert('Select a payment method first.');
-    }
-    if (selectedWalletMethod === 'store_credit') {
-      if (storePanel) storePanel.hidden = false;
-      return;
     }
     if (selectedWalletMethod === 'nets') {
       requestNetsQr();
@@ -412,34 +384,6 @@
   };
 
   confirmTopup?.addEventListener('click', handleProceed);
-  storeSubmit?.addEventListener('click', () => {
-    const password = storeInput?.value || '';
-    if (!password) {
-      alert('Password required.');
-      storeInput?.focus();
-      return;
-    }
-    fetch('/wallet/pay_with_store_credit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
-    }).then(res => res.json()).then(data => {
-      if (data && data.success && data.orderId) {
-        window.location.href = `/wallet/history/${data.orderId}`;
-      } else {
-        alert(data.error || 'Unable to top up with store credit.');
-      }
-    }).catch(err => {
-      console.error(err);
-      alert('Unable to use store credit.');
-    });
-  });
-  storeInput?.addEventListener('keydown', (evt) => {
-    if (evt.key === 'Enter') {
-      evt.preventDefault();
-      storeSubmit.click();
-    }
-  });
 </script>
 
 <%- include('partials/footer') %>
